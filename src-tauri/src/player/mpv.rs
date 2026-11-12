@@ -147,6 +147,15 @@ unsafe fn lossy(text: *const c_char) -> String {
     unsafe { CStr::from_ptr(text) }.to_string_lossy().into_owned()
 }
 
+/// A value for an asynchronous property write.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
+    Flag(bool),
+    Double(f64),
+    Int(i64),
+    Text(String),
+}
+
 /// Property formats vihpluh observes or reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
@@ -274,6 +283,88 @@ impl Mpv {
         check(Self::with_args(args, |argv| unsafe {
             sys::mpv_command_async(self.raw(), id, argv)
         })?)
+    }
+
+    /// Runs a command, waits for it, and returns its result (e.g. `screenshot` → filename).
+    pub fn command_ret(&self, args: &[&str]) -> MpvResult<Node> {
+        // SAFETY: as in `command`; on success mpv fills `result`, which we copy and release.
+        unsafe {
+            let mut result = std::mem::zeroed::<sys::mpv_node>();
+            let code = Self::with_args(args, |argv| {
+                sys::mpv_command_ret(self.raw(), argv, &raw mut result)
+            })?;
+            check(code)?;
+            let value = Node::from_raw(&raw const result);
+            sys::mpv_free_node_contents(&raw mut result);
+            Ok(value)
+        }
+    }
+
+    /// Queues a property write without waiting for mpv's core. A failure arrives later as
+    /// [`Event::AsyncError`]. Use this from IPC handlers: the core may be busy opening a file.
+    pub fn set_async(&self, name: &str, value: Value) -> MpvResult<()> {
+        let name = cstring(name)?;
+        // SAFETY: each branch passes a pointer to a live value of the type its format
+        // announces; mpv copies the value before returning.
+        let code = unsafe {
+            match value {
+                Value::Flag(b) => {
+                    let mut flag: c_int = c_int::from(b);
+                    sys::mpv_set_property_async(
+                        self.raw(),
+                        0,
+                        name.as_ptr(),
+                        sys::mpv_format_MPV_FORMAT_FLAG,
+                        (&raw mut flag).cast::<c_void>(),
+                    )
+                }
+                Value::Double(mut d) => sys::mpv_set_property_async(
+                    self.raw(),
+                    0,
+                    name.as_ptr(),
+                    sys::mpv_format_MPV_FORMAT_DOUBLE,
+                    (&raw mut d).cast::<c_void>(),
+                ),
+                Value::Int(mut i) => sys::mpv_set_property_async(
+                    self.raw(),
+                    0,
+                    name.as_ptr(),
+                    sys::mpv_format_MPV_FORMAT_INT64,
+                    (&raw mut i).cast::<c_void>(),
+                ),
+                Value::Text(text) => {
+                    let text = cstring(&text)?;
+                    let mut pointer = text.as_ptr();
+                    sys::mpv_set_property_async(
+                        self.raw(),
+                        0,
+                        name.as_ptr(),
+                        sys::mpv_format_MPV_FORMAT_STRING,
+                        (&raw mut pointer).cast::<c_void>(),
+                    )
+                }
+            }
+        };
+        check(code)
+    }
+
+    /// Whether the linked mpv has a property of this name (it may still be unavailable now).
+    pub fn property_known(&self, name: &str) -> bool {
+        let Ok(name) = cstring(name) else { return false };
+        // SAFETY: `node` is a valid out-pointer; contents are released on success.
+        unsafe {
+            let mut node = std::mem::zeroed::<sys::mpv_node>();
+            let code = sys::mpv_get_property(
+                self.raw(),
+                name.as_ptr(),
+                sys::mpv_format_MPV_FORMAT_NODE,
+                (&raw mut node).cast::<c_void>(),
+            );
+            if code >= 0 {
+                sys::mpv_free_node_contents(&raw mut node);
+            }
+            code != sys::mpv_error_MPV_ERROR_PROPERTY_NOT_FOUND
+        }
     }
 
     pub fn set_string(&self, name: &str, value: &str) -> MpvResult<()> {

@@ -4,6 +4,7 @@
 //! values fall back to the default and are reported by key.
 
 pub mod schema;
+pub mod store;
 
 use std::path::Path;
 

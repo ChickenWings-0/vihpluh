@@ -329,7 +329,7 @@ Settings marked ⟳ apply after restart; everything else applies live.
 | `general.open_behavior` | enum(`replace`\|`enqueue`\|`play_next`) | `replace` | When opening files while something is playing | Replace the queue, add to its end, or play right after the current item. |
 | `general.pause_on_minimize` | bool | `false` | Pause when minimized | Pauses video (not music) when the window is minimized. |
 | `general.media_keys` ⟳ | bool | `true` | Media keys and system media controls | Respond to play/pause/next keys and show what's playing in the OS media overlay. |
-| `general.screenshot_dir` | string | `""` | Screenshot folder | Empty = your Pictures folder, in "vihpluh". |
+| `general.screenshot_dir` | string | `""` | Screenshot folder | Empty = your Pictures folder, in "vihpluh". *(With `--home`, `VIHPLUH_HOME`, or portable mode, empty means `<home>/screenshots` instead.)* |
 | `general.screenshot_format` | enum(`png`\|`jpg`\|`webp`) | `png` | Screenshot format | PNG is lossless; JPG and WebP are smaller. |
 | `general.screenshot_template` | string | `"%F-%wH.%wM.%wS"` | Screenshot file name | mpv template: %F = file name, %wH.%wM.%wS = timestamp. |
 | `general.log_level` | enum(`error`\|`warn`\|`info`\|`debug`\|`trace`) | `warn` | Log detail | Higher levels help diagnose problems but write more to disk. |

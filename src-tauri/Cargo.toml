@@ -30,6 +30,10 @@ directories = "6"
 toml = "0.9"
 ts-rs = "12"
 libmpv2-sys = "4"
+souvlaki = "0.9"
+notify = "8"
+toml_edit = "0.25.19"
+tauri-plugin-single-instance = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
@@ -38,6 +42,7 @@ windows = { version = "0.61", features = [
   "Win32_Graphics_Dxgi",
   "Win32_System_Console",
   "Win32_System_LibraryLoader",
+  "Win32_System_Power",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }

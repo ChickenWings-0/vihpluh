@@ -40,6 +40,9 @@ pub fn fixed(config: &Config, ytdlp_available: bool) -> OptionList {
     push(&mut o, "save-position-on-quit", "no");
     push(&mut o, "terminal", "no");
     push(&mut o, "msg-level", "all=warn");
+    // vihpluh keeps the display awake itself, the same way on every platform
+    // (platform/power.rs).
+    push(&mut o, "stop-screensaver", "no");
     o
 }
 
@@ -58,8 +61,9 @@ pub const OPTIONAL_SCRIPT_SWITCHES: &[&str] = &[
     "load-context-menu",
 ];
 
-/// Options derived from `config.toml`.
-pub fn from_config(config: &Config) -> OptionList {
+/// Options derived from `config.toml`. `screenshot_dir` is the resolved folder (the setting,
+/// or the Pictures fallback).
+pub fn from_config(config: &Config, screenshot_dir: &str) -> OptionList {
     let mut o = OptionList::new();
     let (general, video, audio, subs, net, perf) = (
         &config.general,
@@ -77,8 +81,8 @@ pub fn from_config(config: &Config) -> OptionList {
         VideoQuality::Balanced => {}
     }
 
-    if !general.screenshot_dir.is_empty() {
-        push(&mut o, "screenshot-directory", general.screenshot_dir.clone());
+    if !screenshot_dir.is_empty() {
+        push(&mut o, "screenshot-directory", screenshot_dir);
     }
     push(&mut o, "screenshot-template", general.screenshot_template.clone());
     push(&mut o, "screenshot-format", general.screenshot_format.as_str());
@@ -261,16 +265,29 @@ pub fn passthrough(config: &Config) -> OptionList {
         .collect()
 }
 
+/// Options that are starting values rather than settings: re-applying them when the config
+/// changes would undo what the user did since (volume, speed) or re-run a whole profile.
+const NOT_LIVE: &[&str] = &["volume", "speed", "profile"];
+
+/// The config-derived options that are applied again, live, when a setting changes.
+pub fn live(config: &Config, screenshot_dir: &str) -> OptionList {
+    from_config(config, screenshot_dir)
+        .into_iter()
+        .filter(|(name, _)| !NOT_LIVE.contains(&name.as_str()))
+        .collect()
+}
+
 /// The complete, ordered option list for the primary handle.
 pub fn build(
     config: &Config,
     ytdlp_available: bool,
     surface: Vec<(&'static str, String)>,
     hwdec: String,
+    screenshot_dir: &str,
     cli: &[(String, String)],
 ) -> OptionList {
     let mut o = fixed(config, ytdlp_available);
-    o.extend(from_config(config));
+    o.extend(from_config(config, screenshot_dir));
     o.extend(surface.into_iter().map(|(name, value)| (name.to_string(), value)));
     push(&mut o, "hwdec", hwdec);
     o.extend(passthrough(config));
@@ -296,8 +313,11 @@ mod tests {
             false,
             vec![("vo", "gpu-next".into())],
             "d3d11va".into(),
+            "C:/Pictures/vihpluh",
             &[],
         );
+        assert_eq!(value(&o, "screenshot-directory"), Some("C:/Pictures/vihpluh"));
+        assert_eq!(value(&o, "stop-screensaver"), Some("no"));
         assert_eq!(value(&o, "config"), Some("no"));
         assert_eq!(value(&o, "ytdl"), Some("no"));
         assert_eq!(value(&o, "keep-open"), Some("yes"));
@@ -321,12 +341,21 @@ mod tests {
         );
         assert_eq!(loaded.warnings, vec![]);
         let cli = vec![("scale".to_string(), "bilinear".to_string())];
-        let o = build(&loaded.config, true, vec![], "d3d11va".into(), &cli);
+        let o = build(&loaded.config, true, vec![], "d3d11va".into(), "", &cli);
         assert_eq!(value(&o, "video-sync"), Some("display-resample"), "interpolation implies it");
         assert_eq!(value(&o, "hwdec"), Some("no"), "[mpv.options] beats the computed chain");
         assert_eq!(value(&o, "deband"), Some("yes"), "booleans become yes/no");
         assert_eq!(value(&o, "scale"), Some("bilinear"), "--mpv-opt beats [mpv.options]");
         assert_eq!(value(&o, "ytdl"), Some("yes"));
+    }
+
+    #[test]
+    fn live_options_leave_starting_values_alone() {
+        let live = live(&config::defaults(), "");
+        assert_eq!(value(&live, "volume"), None);
+        assert_eq!(value(&live, "speed"), None);
+        assert_eq!(value(&live, "volume-max"), Some("130"));
+        assert_eq!(value(&live, "sub-font-size"), Some("42"));
     }
 
     #[test]
@@ -379,7 +408,8 @@ mod tests {
 
         for config in variants {
             let mpv = Mpv::create().unwrap();
-            let options = build(&config, true, vec![("vo", "null".into())], "no".into(), &[]);
+            let options =
+                build(&config, true, vec![("vo", "null".into())], "no".into(), "shots", &[]);
             for (name, value) in options {
                 // A window must not appear during tests.
                 if name == "force-window" {

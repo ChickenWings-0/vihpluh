@@ -103,6 +103,18 @@ impl Paths {
         self.logs.join("vihpluh.log")
     }
 
+    /// Where screenshots go when `general.screenshot_dir` is empty: the user's Pictures
+    /// folder normally, but inside the home root whenever one is in use (dev builds, `--home`,
+    /// portable), so those modes never write into personal folders.
+    pub fn default_screenshot_dir(&self) -> PathBuf {
+        match (self.source, self.data.parent()) {
+            (HomeSource::Os, _) | (_, None) => directories::UserDirs::new()
+                .and_then(|dirs| dirs.picture_dir().map(|p| p.join(APP_DIR)))
+                .unwrap_or_else(|| self.data.join("screenshots")),
+            (_, Some(root)) => root.join("screenshots"),
+        }
+    }
+
     pub fn dto(&self) -> PathsDto {
         PathsDto {
             config: self.config.display().to_string(),
@@ -254,6 +266,18 @@ mod tests {
                 .unwrap();
         assert_eq!(paths.source, HomeSource::DevDefault);
         assert_eq!(paths.data, PathBuf::from("/d/data"));
+    }
+
+    #[test]
+    fn screenshots_stay_inside_an_override_root() {
+        let paths = resolve_override(&Inputs {
+            dev_default: Some(PathBuf::from("/repo/.local")),
+            ..inputs()
+        })
+        .unwrap();
+        assert_eq!(paths.default_screenshot_dir(), PathBuf::from("/repo/.local/screenshots"));
+        let os = from_os(os_dirs().unwrap());
+        assert!(os.default_screenshot_dir().ends_with(APP_DIR));
     }
 
     #[test]

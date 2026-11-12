@@ -18,10 +18,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use clap::Parser;
-use tauri::{AppHandle, Manager, RunEvent, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindowBuilder};
 
 use cli::Cli;
-use config::Config;
+use config::schema::OpenBehavior;
+use config::store::{ConfigChange, ConfigStore};
+use ipc::dto::{ConfigChanged, OpenEvent, OpenMode, OsdEvent, OsdKind};
+use ipc::events;
 use paths::Paths;
 use player::Player;
 use video::Capabilities;
@@ -29,7 +32,7 @@ use video::Capabilities;
 /// Shared application state, managed by Tauri.
 pub struct AppState {
     pub paths: Paths,
-    pub config: Config,
+    pub config: Arc<ConfigStore>,
     pub player: Arc<Player>,
     pub capabilities: Capabilities,
     revealed: AtomicBool,
@@ -69,12 +72,13 @@ pub fn run() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let loaded = config::load(&paths.config_file());
+    let (store, warnings) = ConfigStore::open(paths.config_file());
+    let config = store.get();
     let level = cli
         .log_level
         .as_deref()
         .and_then(logging::parse_level)
-        .or_else(|| logging::parse_level(loaded.config.general.log_level.as_str()))
+        .or_else(|| logging::parse_level(config.general.log_level.as_str()))
         .unwrap_or(tracing::Level::WARN);
     logging::init(&paths.log_file(), level);
     tracing::info!(
@@ -84,14 +88,31 @@ pub fn run() -> ExitCode {
         source = ?paths.source,
         "starting"
     );
-    for warning in &loaded.warnings {
+    for warning in &warnings {
         tracing::warn!("{warning}");
     }
 
-    // Must precede toolkit initialisation and any thread creation.
-    platform::prepare_environment(&loaded.config);
+    let context = tauri::generate_context!();
 
-    match launch(cli, paths, loaded.config) {
+    // A second launch only hands its arguments to the running instance. Detect that before
+    // starting mpv, so the hand-off never opens (and briefly plays) the file here.
+    if config.general.single_instance
+        && platform::other_instance_running(&context.config().identifier)
+    {
+        tracing::info!("another instance is running: forwarding the arguments to it");
+        return match forward_to_running_instance(context) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(err) => {
+                eprintln!("vihpluh: {err}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    // Must precede toolkit initialisation and any thread creation.
+    platform::prepare_environment(&config);
+
+    match launch(cli, paths, store, context) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             tracing::error!("fatal: {err}");
@@ -101,26 +122,49 @@ pub fn run() -> ExitCode {
     }
 }
 
-fn launch(cli: Cli, paths: Paths, config: Config) -> Result<(), Box<dyn std::error::Error>> {
+/// Builds a bare app whose only job is the single-instance plugin: it sends our argv to the
+/// running instance and exits the process during plugin setup.
+fn forward_to_running_instance(
+    context: tauri::Context<tauri::Wry>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|_, _, _| {}))
+        .build(context)?;
+    // Reaching this line means the other instance exited between the check and the hand-off.
+    Err("the running instance closed during start-up; start vihpluh again".into())
+}
+
+fn launch(
+    cli: Cli,
+    paths: Paths,
+    store: Arc<ConfigStore>,
+    context: tauri::Context<tauri::Wry>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = store.get();
     // mpv starts first: its video output and the first file come up while Tauri and the
     // webview (the slow part of startup) are still initialising.
     let surface = video::create(&config)?;
     let capabilities = surface.capabilities();
-    let player = Player::start(&config, surface, &cli.mpv_opts)?;
-    if let Some(source) = cli.sources.first() {
-        let start = cli.start.map(cli::StartPosition::to_mpv);
-        player.open(source, start.as_deref(), cli.paused)?;
+    let player =
+        Player::start(config.clone(), surface, &paths.default_screenshot_dir(), &cli.mpv_opts)?;
+    if !cli.sources.is_empty() {
+        player.open_cli(cli.sources.clone(), cli.start, cli.paused, OpenMode::Replace);
     }
 
-    let state = AppState { paths, config, player, capabilities, revealed: AtomicBool::new(false) };
-    let app = tauri::Builder::default()
+    let state =
+        AppState { paths, config: store, player, capabilities, revealed: AtomicBool::new(false) };
+    let mut builder = tauri::Builder::default();
+    if config.general.single_instance {
+        builder = builder.plugin(tauri_plugin_single_instance::init(on_second_instance));
+    }
+    let app = builder
         .manage(state)
         .setup(|app| {
             setup(app)?;
             Ok(())
         })
         .invoke_handler(invoke_handler())
-        .build(tauri::generate_context!())?;
+        .build(context)?;
 
     app.run(|app, event| {
         if let RunEvent::Exit = event {
@@ -130,25 +174,44 @@ fn launch(cli: Cli, paths: Paths, config: Config) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
+macro_rules! commands {
+    ($($extra:path),* $(,)?) => {
+        tauri::generate_handler![
+            ipc::commands::app::app_info,
+            ipc::commands::app::app_ready,
+            ipc::commands::app::app_quit,
+            ipc::commands::player::player_snapshot,
+            ipc::commands::player::player_open,
+            ipc::commands::player::player_set_paused,
+            ipc::commands::player::player_toggle_pause,
+            ipc::commands::player::player_seek,
+            ipc::commands::player::player_frame_step,
+            ipc::commands::player::player_set_speed,
+            ipc::commands::player::player_set_volume,
+            ipc::commands::player::player_set_muted,
+            ipc::commands::player::player_set_direction,
+            ipc::commands::player::player_set_loop_file,
+            ipc::commands::player::player_set_ab_loop,
+            ipc::commands::player::player_stop,
+            ipc::commands::player::player_screenshot,
+            ipc::commands::player::player_mpv_command,
+            ipc::commands::tracks::tracks_select,
+            ipc::commands::config::config_get,
+            ipc::commands::config::config_set,
+            ipc::commands::config::config_reset,
+            $($extra),*
+        ]
+    };
+}
+
 #[cfg(debug_assertions)]
 fn invoke_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![
-        ipc::commands::app::app_info,
-        ipc::commands::app::app_ready,
-        ipc::commands::app::app_quit,
-        ipc::commands::player::player_mpv_command,
-        ipc::commands::debug::debug_mpv_get,
-    ]
+    commands![ipc::commands::debug::debug_mpv_get]
 }
 
 #[cfg(not(debug_assertions))]
 fn invoke_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![
-        ipc::commands::app::app_info,
-        ipc::commands::app::app_ready,
-        ipc::commands::app::app_quit,
-        ipc::commands::player::player_mpv_command,
-    ]
+    commands![]
 }
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -166,7 +229,24 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let window = WebviewWindowBuilder::from_config(app.handle(), &window_config)?
         .data_directory(state.paths.data.join("webview"))
         .build()?;
-    state.player.attach(app.handle().clone(), &window)?;
+    state.player.attach(app.handle().clone(), &window, platform::native_window_handle(&window))?;
+
+    // Settings changes — from the UI or from an editor saving config.toml — apply live.
+    let (player, handle) = (state.player.clone(), app.handle().clone());
+    state.config.on_change(move |change: &ConfigChange| {
+        player.config_changed(change.config.clone());
+        for (path, value) in &change.changed {
+            let payload = ConfigChanged { path: path.clone(), value: value.clone() };
+            let _ = handle.emit(events::CONFIG_CHANGED, &payload);
+        }
+        for warning in &change.new_warnings {
+            let osd = OsdEvent::new(OsdKind::Warn, format!("Settings: {warning}"));
+            let _ = handle.emit(events::OSD_SHOW, &osd);
+        }
+    });
+    if let Err(err) = state.config.watch() {
+        tracing::warn!("config.toml will not be reloaded automatically: {err}");
+    }
 
     let handle = app.handle().clone();
     std::thread::spawn(move || {
@@ -174,6 +254,51 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         reveal_main_window(&handle);
     });
     Ok(())
+}
+
+/// A second `vihpluh` launch forwarded its command line (ARCHITECTURE §4.6).
+fn on_second_instance(app: &AppHandle, argv: Vec<String>, cwd: String) {
+    let Some(state) = app.try_state::<AppState>() else { return };
+    let cli = match Cli::try_parse_from(&argv) {
+        Ok(cli) => cli,
+        Err(err) => {
+            tracing::warn!("ignoring a forwarded command line that does not parse: {err}");
+            return;
+        }
+    };
+    let sources = cli::normalize_sources(&cli.sources, std::path::Path::new(&cwd));
+    tracing::info!(count = sources.len(), "second instance forwarded its command line");
+    if sources.is_empty() {
+        bring_to_front(app);
+        return;
+    }
+    let mode = if cli.enqueue {
+        OpenMode::Enqueue
+    } else if cli.play_next {
+        OpenMode::PlayNext
+    } else {
+        match state.config.get().general.open_behavior {
+            OpenBehavior::Replace => OpenMode::Replace,
+            OpenBehavior::Enqueue => OpenMode::Enqueue,
+            OpenBehavior::PlayNext => OpenMode::PlayNext,
+        }
+    };
+    state.player.open_cli(sources.clone(), cli.start, cli.paused, mode);
+    let _ = app.emit(events::APP_OPEN, &OpenEvent { sources, mode });
+    if mode == OpenMode::Replace {
+        bring_to_front(app);
+    }
+}
+
+fn bring_to_front(app: &AppHandle) {
+    #[cfg(debug_assertions)]
+    if std::env::var_os("VIHPLUH_QUIET_TEST").is_some() {
+        return;
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
 }
 
 /// Shows the main window once. Called when the frontend reports its first paint, or by the

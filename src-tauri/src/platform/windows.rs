@@ -51,3 +51,13 @@ pub fn show_window_unobtrusively(window: &tauri::WebviewWindow) -> bool {
     }
     true
 }
+
+pub fn single_instance_window_exists(identifier: &str) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
+    use windows::core::HSTRING;
+
+    let class = HSTRING::from(format!("{identifier}-sic"));
+    let title = HSTRING::from(format!("{identifier}-siw"));
+    // SAFETY: FindWindowW only reads the two NUL-terminated strings.
+    unsafe { FindWindowW(&class, &title) }.is_ok_and(|h| !h.0.is_null())
+}

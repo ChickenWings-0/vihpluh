@@ -1,6 +1,29 @@
 /** Typed subscriptions to core events (ARCHITECTURE §7.4). */
+import type { ConfigChanged } from "./bindings/ConfigChanged";
 import type { DebugStats } from "./bindings/DebugStats";
+import type { OpenEvent } from "./bindings/OpenEvent";
+import type { OsdEvent } from "./bindings/OsdEvent";
+import type { PlayerState } from "./bindings/PlayerState";
+import type { TimeEvent } from "./bindings/TimeEvent";
 import { listen, type Unlisten } from "./transport";
+
+/** A shallow patch: each present key replaces the old value wholesale. */
+export type PlayerPatch = { rev: number } & Partial<Omit<PlayerState, "rev">>;
+
+export const onPlayerPatch = (handler: (patch: PlayerPatch) => void): Unlisten =>
+  listen<PlayerPatch>("player://patch", handler);
+
+export const onPlayerTime = (handler: (time: TimeEvent) => void): Unlisten =>
+  listen<TimeEvent>("player://time", handler);
+
+export const onConfigChanged = (handler: (change: ConfigChanged) => void): Unlisten =>
+  listen<ConfigChanged>("config://changed", handler);
+
+export const onOsd = (handler: (osd: OsdEvent) => void): Unlisten =>
+  listen<OsdEvent>("osd://show", handler);
+
+export const onAppOpen = (handler: (open: OpenEvent) => void): Unlisten =>
+  listen<OpenEvent>("app://open", handler);
 
 export const onDebugStats = (handler: (stats: DebugStats) => void): Unlisten =>
   listen<DebugStats>("debug://stats", handler);

@@ -251,6 +251,9 @@ event thread**, so there is exactly one path by which `PlayerState` mutates.
 1. `main()`: resolve paths (§9.1) → init logging → load config (defaults ⊕ user file) → set process
    env that must precede toolkit init (Linux: `WEBKIT_DISABLE_DMABUF_RENDERER`, `GDK_BACKEND` overrides; §5.3).
 2. Parse CLI (§4.6). If another instance is running, `single-instance` forwards argv to it and this process exits.
+   On Windows this is detected *before* mpv starts (the plugin's hidden `<identifier>-siw` window), so a
+   forwarding launch never opens the file itself (D20). On Linux the plugin uses D-Bus and the check happens
+   inside Tauri start-up, after mpv has started; acceptable until it shows up as a problem.
 3. Create the `VideoSurface` for the platform and the primary mpv handle with init options (§6.2); start
    the `mpv-events` and `core` threads; apply the CLI open-request if any. This happens **before** Tauri
    starts, so mpv brings up its video output and opens the first file while the webview (the slow part of
@@ -486,7 +489,9 @@ input-vo-keyboard=no   input-cursor=no   cursor-autohide=no
 idle=yes   keep-open=yes   force-window=yes   # core decides what happens at EOF
 save-position-on-quit=no   watch-later-directory=<unused>   # resume is vihpluh's job (§6.5)
 terminal=no   msg-level=all=warn
-screenshot-directory=<general.screenshot_dir>   screenshot-template=<general.screenshot_template>
+stop-screensaver=no           # vihpluh inhibits sleep itself on every platform (platform/power.rs, D19)
+load-stats-overlay=no  load-console=no  load-auto-profiles=no  …   # built-in scripts (D16)
+screenshot-directory=<general.screenshot_dir or the default, D21>   screenshot-template=<general.screenshot_template>
 ```
 
 mpv log messages (`mpv_request_log_messages("warn")`) are forwarded into `tracing`.
@@ -699,7 +704,7 @@ interface AppInfo {
 | `player_set_loop_file` | `{ enabled: boolean }` | `void` |
 | `player_set_ab_loop` | `{ a: number \| null, b: number \| null }` | `void` |
 | `player_stop` | — | `void` |
-| `player_screenshot` | `{ subtitles: boolean }` | `string` (path) |
+| `player_screenshot` | `{ subtitles: boolean }` | `string` (path); `mpv` error "nothing is playing" when idle |
 | `player_set_sleep_timer` | `{ kind: "off" \| "minutes" \| "end_of_file" \| "end_of_queue", minutes?: number }` | `void` |
 | `player_mpv_command` | `{ args: string[] }` (backs the `mpv.command` action only) | `void` |
 | `inspector_subscribe` | `{ enabled: boolean }` | `void` |
@@ -1457,6 +1462,11 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D16 | mpv's built-in scripts are switched off individually (`load-stats-overlay`, `load-console`, `load-auto-profiles`, `load-select`, `load-positioning`, `load-commands`, `load-context-menu`, `load-osd-console`) | `load-scripts=no` only covers the user scripts directory; the built-ins were still loading. Switches missing on older mpv are skipped silently. |
 | D17 | Integration tests live in the library's unit-test binary, not `src-tauri/tests/` | A separate test executable lacks the app manifest and dies at load (`STATUS_ENTRYPOINT_NOT_FOUND`) because Tauri's imports need Common Controls v6. |
 | D18 | mpv and the video surface start before Tauri; the surface is bound to the window afterwards (`VideoSurface::bind` replaces `attach`) | WebView2 creation blocks the main thread for ~350 ms. Starting mpv first runs VO creation, file open, decoder and audio-device init in parallel with it: first frame went from ~950–1300 ms to ~620–910 ms after process start on the dev machine. |
+| D19 | Sleep inhibition is vihpluh's job on every platform (`stop-screensaver=no`); Display while video plays, System while audio plays, nothing otherwise | The Linux render backend has no mpv window to do it, and one code path is easier to reason about. Windows uses `SetThreadExecutionState` on the core thread. |
+| D20 | Detect a running instance before starting mpv (Windows) | Otherwise the forwarding launch starts mpv and begins opening the file in the ~200 ms before the plugin hands off and exits. |
+| D21 | With a home override (`--home`, `VIHPLUH_HOME`, portable, dev builds) an empty `general.screenshot_dir` means `<home>/screenshots` | Those modes must keep everything in one folder; dev runs must never write into the owner's Pictures folder. |
+| D22 | IPC handlers write mpv properties asynchronously (`mpv_set_property_async`) and let the change come back as an event; only the core actor decides policy (open, pause-at-end, stop) | A handler must never block on mpv's core, which can be busy opening a file. The mirrored state still has exactly one writer. |
+| D23 | `player://patch` carries only the top-level `PlayerState` keys whose JSON changed since the last patch | A cheap, exact diff with no per-field bookkeeping; the frontend merges shallowly and re-fetches on a revision gap. |
 
 ### Open risks (each owned by a Phase 1 spike)
 

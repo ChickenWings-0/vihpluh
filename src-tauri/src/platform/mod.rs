@@ -1,6 +1,9 @@
-//! OS integration that is not video: console attachment, process environment, and (from
-//! Phase 2) power inhibition and media keys. Feature code calls the functions here and never
-//! branches on the OS itself.
+//! OS integration that is not video: console attachment, process environment, power
+//! inhibition, media keys, and instance detection. Feature code calls the functions here and
+//! never branches on the OS itself.
+
+pub mod media;
+pub mod power;
 
 use crate::config::Config;
 
@@ -14,6 +17,37 @@ mod windows;
 pub fn attach_parent_console() {
     #[cfg(windows)]
     windows::attach_parent_console();
+}
+
+/// The native handle the OS media controls attach to (the HWND on Windows; unused elsewhere).
+pub fn native_window_handle(window: &tauri::WebviewWindow) -> Option<isize> {
+    #[cfg(windows)]
+    {
+        window.hwnd().ok().map(|h| h.0 as isize)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        None
+    }
+}
+
+/// Whether another vihpluh is already running and will accept forwarded arguments.
+///
+/// Mirrors the marker that `tauri-plugin-single-instance` creates on Windows (a hidden window
+/// named `<identifier>-siw`), so the check can run before mpv starts. On Linux the plugin
+/// uses D-Bus; there the check is not done early and the plugin alone handles the hand-off
+/// (mpv starts briefly in the second process — acceptable until it matters).
+pub fn other_instance_running(identifier: &str) -> bool {
+    #[cfg(windows)]
+    {
+        windows::single_instance_window_exists(identifier)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = identifier;
+        false
+    }
 }
 
 /// Shows a window without activating it and behind every other window. Used only by

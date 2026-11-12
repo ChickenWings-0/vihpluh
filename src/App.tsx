@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { DebugOverlay } from "./features/debug/DebugOverlay";
+import { DevPanel } from "./features/dev/DevPanel";
 import type { AppInfo } from "./ipc/bindings/AppInfo";
 import { appInfo, appReady } from "./ipc/commands";
+import { startSync } from "./stores/sync";
 
 export function App() {
   const [info, setInfo] = useState<AppInfo | null>(null);
+
+  useEffect(() => startSync(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,6 +31,9 @@ export function App() {
   }, []);
 
   return (
-    <main className="h-full w-full">{import.meta.env.DEV && <DebugOverlay info={info} />}</main>
+    <main className="h-full w-full">
+      {import.meta.env.DEV && <DebugOverlay info={info} />}
+      <DevPanel />
+    </main>
   );
 }

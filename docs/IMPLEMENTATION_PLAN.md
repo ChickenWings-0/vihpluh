@@ -178,31 +178,32 @@ parallel with WebView2 start-up (D18). To revisit with a release build in the Ph
 
 ---
 
-## 4. Phase 2 — Core playback and state sync — ☐ not started
+## 4. Phase 2 — Core playback and state sync — ◐ in progress
 
 **Goal:** the Rust core fully mirrors mpv and exposes it over typed IPC; a bare-bones test UI drives it.
 
-- [ ] `PlayerCore` actor, `PlayerHandle`, `mpv-events` thread (A§4.1).
-- [ ] `observe.rs` property table → `PlayerState` reducer (A§6.3); status state machine (A§6.4) with unit tests driven by recorded event sequences.
-- [ ] Events `player://patch` (coalesced, `rev`) and `player://time` (5 Hz + immediate on seek/pause).
-- [ ] All `player_*` and `tracks_select` commands (A§7.3); DTOs in `ipc/dto.rs` with ts-rs export.
-- [ ] `config/`: `default.toml` embedded, user overlay, `toml_edit` writes, file watcher, `config_get/set/reset`, `config://changed` (K§1, K§5 keys needed so far).
-- [ ] Frontend: `stores/player.ts`, `stores/time.ts` (rAF interpolation), `stores/config.ts`; `ipc/commands.ts`, `ipc/events.ts`.
-- [ ] Minimal dev UI (unstyled): open, play/pause, seek slider, volume, track lists, state dump. Discarded in Phase 3.
-- [ ] `platform/`: screen-sleep inhibit while video plays (Windows + Linux); `souvlaki` media keys/now-playing behind `general.media_keys`.
-- [ ] `tauri-plugin-single-instance`: second launch forwards argv per `general.open_behavior`.
-- [ ] Error paths: unplayable file → `status: "error"` + `osd://show`.
+- [x] `PlayerCore` actor, `PlayerHandle`, `mpv-events` thread (A§4.1). *(The handle is `Player`; the actor is `Core`.)*
+- [x] `observe.rs` property table → `PlayerState` reducer (A§6.3); status state machine (A§6.4) with unit tests driven by recorded event sequences.
+- [x] Events `player://patch` (coalesced, `rev`) and `player://time` (5 Hz + immediate on seek/pause).
+- [x] All `player_*` and `tracks_select` commands (A§7.3); DTOs in `ipc/dto.rs` with ts-rs export. *(`enqueue` / `play_next` open modes act like `replace` until the queue lands in Phase 4; `player_set_sleep_timer` arrives with `sleep.rs` in Phase 5.)*
+- [x] `config/`: `default.toml` embedded, user overlay, `toml_edit` writes, file watcher, `config_get/set/reset`, `config://changed` (K§1, K§5 keys needed so far).
+- [x] Frontend: `stores/player.ts`, `stores/time.ts` (rAF interpolation), `stores/config.ts`; `ipc/commands.ts`, `ipc/events.ts`.
+- [x] Minimal dev UI (unstyled): open, play/pause, seek slider, volume, track lists, state dump. Discarded in Phase 3.
+- [x] `platform/`: screen-sleep inhibit while video plays — Windows; `souvlaki` media keys/now-playing behind `general.media_keys`.
+- [ ] `platform/`: screen-sleep inhibit on Linux. *(Placeholder that only logs; `GtkApplication::inhibit` arrives with the render backend after S2.)*
+- [x] `tauri-plugin-single-instance`: second launch forwards argv per `general.open_behavior`.
+- [x] Error paths: unplayable file → `status: "error"` + `osd://show`.
 
 ### Verification
 
-- [ ] Play/pause/seek/volume/mute/speed from the dev UI all reflect in `PlayerState` within one patch; no polling anywhere in the frontend.
+- [x] Play/pause/seek/volume/mute/speed from the dev UI all reflect in `PlayerState` within one patch; no polling anywhere in the frontend. *(Driven through the same commands over the webview debugging port: 44–184 ms per change, revisions contiguous, 5 rapid changes coalesced into 2 patches.)*
 - [ ] Interpolated position stays within ±50 ms of mpv's `time-pos` over 10 min at 1× and 2× (log the drift).
-- [ ] Switching audio and subtitle tracks on T1/T5 works; `selected` updates.
-- [ ] Editing `.local/config/config.toml` in a text editor while running emits `config://changed` and applies (test with `audio.max_volume`).
-- [ ] Media keys play/pause from another focused app; the OS media overlay shows the title (W: SMTC; L: MPRIS via `playerctl status`).
-- [ ] Display does not sleep during playback; does sleep when paused (both OSes).
-- [ ] T12 (corrupt) → error state, no crash, no hang. Launching a second instance with a file hands off and exits.
-- [ ] Unit tests: state machine transitions, hwdec table, config overlay/migration, path resolution.
+- [x] Switching audio and subtitle tracks on T1/T5 works; `selected` updates. *(T1 only: T5 is not assembled yet.)*
+- [x] Editing `.local/config/config.toml` in a text editor while running emits `config://changed` and applies (test with `audio.max_volume`). *(115 reached mpv's `volume-max` within the 150 ms debounce; an invalid value raised one warning naming the key; deleting the file restored defaults.)*
+- [ ] Media keys play/pause from another focused app; the OS media overlay shows the title (W: SMTC; L: MPRIS via `playerctl status`). *(**W** ✓: the session lists the title and live status; a toggle sent through the Windows session (the path media keys take) paused and resumed playback while the window was in the background. No physical key was pressed.)*
+- [ ] Display does not sleep during playback; does sleep when paused (both OSes). *(**W**, partial: the app requests Display while video plays and releases on pause/stop (debug log). The system-wide state could not isolate it — another program held the display awake throughout — and `powercfg /requests` needs admin.)*
+- [x] T12 (corrupt) → error state, no crash, no hang. Launching a second instance with a file hands off and exits. *(Empty and truncated files → `error` + toast, recovery on the next open; the second instance exited in 177 ms without starting mpv and the first played its file, relative path resolved.)*
+- [x] Unit tests: state machine transitions, hwdec table, config overlay/migration, path resolution. *(Migration has nothing to migrate yet: schema 1; the scaffold is a Phase 10 task.)*
 
 **Platforms:** W + L-Wayland (X11 smoke test only).
 
