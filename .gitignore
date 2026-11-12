@@ -1,0 +1,27 @@
+# --- Build output ---
+/node_modules/
+/dist/
+/src-tauri/target/
+/src-tauri/gen/schemas/
+
+# --- Vendored native binaries (fetched by scripts/fetch-libmpv.ps1, never committed) ---
+/src-tauri/lib/
+
+# --- Local / personal state (kept out of the public repo) ---
+# Dev-mode config/data/cache root (VIHPLUH_HOME=./.local)
+/.local/
+# Reference media files for manual verification
+/test-media/
+.claude/settings.local.json
+*.local.toml
+*.local.json
+
+# --- Logs & OS/editor noise ---
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
