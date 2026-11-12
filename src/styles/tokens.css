@@ -1,0 +1,114 @@
+/*
+ * Design tokens — DESIGN_SYSTEM §2–§4, §12. Every colour, radius, and dimension used by
+ * component code comes from here. Dark values live on :root; the light theme overrides them.
+ * Accent-derived tokens are rewritten at runtime when interface.accent changes (§2.3).
+ */
+
+:root {
+  /* ── Colour: dark theme (§2.1) ─────────────────────────────────────────── */
+  --video-bg: #000000;
+  --bg-base: #0d0d0f;
+  --bg-surface: #16161a;
+  --bg-raised: #1e1e24;
+  --bg-hover: #26262e;
+  --bg-active: #2e2e38;
+  --border-subtle: #2a2a32;
+  --border-strong: #3a3a45;
+  --text-primary: #ededf0;
+  --text-secondary: #a8a8b3;
+  --text-muted: #8a8a96;
+  --text-disabled: #55555f;
+  --accent: #ff6b00;
+  --accent-hover: #ff8126;
+  --accent-active: #e05e00;
+  --accent-muted: rgb(255 107 0 / 0.16);
+  --accent-text: #ff7a1a;
+  --on-accent: #0d0d0f;
+  --track: #3a3a45;
+  --track-buffer: #5a5a66;
+  --danger: #f0464a;
+  --danger-muted: rgb(240 70 74 / 0.14);
+  --warning: #f5b83d;
+  --success: #3fb96b;
+  --scrim: rgb(0 0 0 / 0.55);
+  --chrome-alpha: 0.92;
+  --icon-duo-base: #8a8a96;
+  --ghost-fill: rgb(255 255 255 / 0.18);
+  --shadow-floating: 0 8px 24px rgb(0 0 0 / 0.45);
+
+  /* ── Typography (§3) ───────────────────────────────────────────────────── */
+  --font-ui:
+    "Segoe UI Variable Text", "Segoe UI", "Inter", "Cantarell", "Noto Sans", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "Source Code Pro", ui-monospace, monospace;
+
+  /* ── Geometry (§4) — rem so interface.ui_scale scales everything ───────── */
+  --space-0_5: 0.125rem; /* 2 px */
+  --space-1: 0.25rem; /* 4 px */
+  --space-1_5: 0.375rem; /* 6 px */
+  --space-2: 0.5rem; /* 8 px */
+  --space-3: 0.75rem; /* 12 px */
+  --space-4: 1rem; /* 16 px */
+  --space-5: 1.25rem; /* 20 px */
+  --space-6: 1.5rem; /* 24 px */
+  --space-8: 2rem; /* 32 px */
+
+  --radius-control: 4px;
+  --radius-surface: 6px;
+
+  --control-sm: 1.5rem; /* 24 px */
+  --control-md: 1.75rem; /* 28 px */
+  --control-lg: 2rem; /* 32 px */
+
+  /* Window anatomy (§6.1) */
+  --topbar-h: 2.5rem; /* 40 px */
+  --bottombar-h: 3.25rem; /* 52 px */
+  --dock-w: 22.5rem; /* 360 px; overwritten from interface.sidebar_width */
+  --drawer-w: 23.75rem; /* 380 px */
+
+  /* Z-order (§6.2) */
+  --z-interaction: 0;
+  --z-osd: 10;
+  --z-chrome: 20;
+  --z-dock: 30;
+  --z-floating: 40;
+  --z-overlay: 50;
+  --z-toast: 60;
+  --z-tooltip: 70;
+
+  /* ── Motion (§12) ──────────────────────────────────────────────────────── */
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 200ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* ── Colour: light theme (§2.2) ──────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --bg-base: #f4f4f6;
+  --bg-surface: #ffffff;
+  --bg-raised: #ededf1;
+  --bg-hover: #e4e4ea;
+  --bg-active: #d9d9e1;
+  --border-subtle: #dcdce3;
+  --border-strong: #c4c4cf;
+  --text-primary: #17171b;
+  --text-secondary: #55555f;
+  --text-muted: #6e6e79;
+  --text-disabled: #b4b4be;
+  --accent-muted: rgb(255 107 0 / 0.14);
+  --accent-text: #c24e00;
+  --track: #d0d0d9;
+  --track-buffer: #a9a9b5;
+  --icon-duo-base: #85858f;
+  --ghost-fill: rgb(0 0 0 / 0.14);
+  --shadow-floating: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+
+/* Reduced motion (§12): everything instant except short opacity fades. */
+:root[data-reduce-motion="true"] {
+  --dur-fast: 0ms;
+  --dur-base: 0ms;
+  --dur-slow: 0ms;
+}

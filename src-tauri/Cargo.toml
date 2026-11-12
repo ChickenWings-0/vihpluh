@@ -1,0 +1,58 @@
+[package]
+name = "vihpluh"
+version = "0.1.0"
+description = "A fast, keyboard-driven desktop media player"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/ChickenWings-0/vihpluh"
+default-run = "vihpluh"
+
+[lib]
+name = "vihpluh_lib"
+
+[[bin]]
+name = "vihpluh"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "registry"] }
+clap = { version = "4", features = ["derive"] }
+directories = "6"
+toml = "0.9"
+ts-rs = "12"
+libmpv2-sys = "4"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_Dxgi",
+  "Win32_System_Console",
+  "Win32_System_LibraryLoader",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = "debuginfo"

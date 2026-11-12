@@ -1,2 +1,6 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.ico binary
+*.png binary
+*.icns binary
+src/ipc/bindings/** linguist-generated=true

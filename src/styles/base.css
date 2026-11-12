@@ -1,0 +1,146 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* Tailwind consumes the tokens so utilities map 1:1 (DESIGN_SYSTEM §14). */
+@theme {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-video: var(--video-bg);
+  --color-base: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-raised: var(--bg-raised);
+  --color-hover: var(--bg-hover);
+  --color-active: var(--bg-active);
+  --color-line: var(--border-subtle);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--text-primary);
+  --color-fg-2: var(--text-secondary);
+  --color-fg-3: var(--text-muted);
+  --color-fg-off: var(--text-disabled);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-accent-soft: var(--accent-muted);
+  --color-accent-fg: var(--accent-text);
+  --color-on-accent: var(--on-accent);
+  --color-track: var(--track);
+  --color-track-buffer: var(--track-buffer);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-muted);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-scrim: var(--scrim);
+  --color-ghost: var(--ghost-fill);
+  --color-duo-base: var(--icon-duo-base);
+
+  /* The only radii (§4): control, surface; knob/track are the slider and toggle parts (§8.5–8.6);
+     full exists solely for the seek thumb. */
+  --radius-*: initial;
+  --radius-control: 4px;
+  --radius-surface: 6px;
+  --radius-knob: 3px;
+  --radius-track: 2px;
+  --radius-full: 9999px;
+
+  /* Literal stack: referencing the token of the same name here would be circular. */
+  --font-sans: var(--font-ui);
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "Source Code Pro", ui-monospace, monospace;
+
+  --text-*: initial;
+
+  --text-xs: 0.6875rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.75rem;
+  --text-sm--line-height: 1rem;
+  --text-base: 0.8125rem;
+  --text-base--line-height: 1.25rem;
+  --text-md: 0.875rem;
+  --text-md--line-height: 1.25rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5rem;
+  --text-osd: 1.25rem;
+  --text-osd--line-height: 1.75rem;
+
+  --shadow-*: initial;
+  --shadow-float: var(--shadow-floating);
+
+  --ease-*: initial;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@layer base {
+  /* The page never paints: only explicit surfaces do, so video shows through (§14). */
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  html {
+    font-size: 16px;
+  }
+
+  body {
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+  }
+
+  /* Focus ring (§13): keyboard focus only, never removed. */
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"],
+  .selectable {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Overlay-style scrollbars (§8.11). */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+  }
+
+  /* Duotone icon layers follow theme and accent (§5.2). */
+  .duo-base {
+    fill: var(--icon-duo-base);
+  }
+
+  .duo-accent {
+    fill: var(--accent);
+  }
+}

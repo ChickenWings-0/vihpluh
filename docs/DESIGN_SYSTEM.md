@@ -865,7 +865,8 @@ If history tracking is off, only the open buttons show. No logo splash, no tips.
   --color-accent-fg: var(--accent-text); --color-on-accent: var(--on-accent);
   --color-danger: var(--danger);       --color-warning: var(--warning);  --color-success: var(--success);
   --radius-control: 4px;               --radius-surface: 6px;
-  --font-sans: var(--font-ui);         --font-mono: var(--font-mono);
+  --font-sans: var(--font-ui);
+  --font-mono: "Cascadia Mono", …;     /* literal stack — `var(--font-mono)` here would reference itself */
 }
 ```
 

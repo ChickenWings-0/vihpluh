@@ -1,0 +1,149 @@
+# vihpluh shipped defaults. Compiled into the binary; never edited by users.
+# The user's config.toml holds only the keys they changed (KEYBINDS_AND_CONFIG §5).
+schema = 1
+
+[general]
+restore_session = true
+single_instance = true
+open_behavior = "replace"
+pause_on_minimize = false
+media_keys = true
+screenshot_dir = ""
+screenshot_format = "png"
+screenshot_template = "%F-%wH.%wM.%wS"
+log_level = "warn"
+
+[interface]
+theme = "dark"
+accent = "#FF6B00"
+ui_scale = 1.0
+window_decorations = "custom"
+autohide_delay_ms = 2000
+autohide_in_windowed = true
+sidebar_mode = "auto"
+sidebar_width = 360
+seek_preview = true
+seek_waveform = false
+seek_chapter_marks = true
+time_display = "total"
+osd_enabled = true
+osd_shortcut_badge = false
+osd_position = "top-center"
+osd_duration_ms = 1200
+tooltip_shortcuts = true
+reduce_motion = "system"
+pip_width = 480
+pip_corner = "bottom-right"
+
+[controls]
+seek_small_s = 5.0
+seek_medium_s = 10.0
+seek_large_s = 60.0
+precise_seek = true
+volume_step = 5.0
+speed_step = 0.1
+sub_delay_step_ms = 50
+audio_delay_step_ms = 50
+sub_size_step = 0.05
+zoom_step = 0.1
+drag_moves_window = true
+wheel_invert = false
+
+[playback]
+resume = "always"
+remember_per_file = true
+auto_queue_folder = true
+at_queue_end = "hold"
+autoplay = true
+default_speed = 1.0
+pitch_correction = true
+sleep_action = "pause"
+finished_percent = 95
+presets_enabled = true
+
+[video]
+hwdec = "auto"
+gpu_api = "auto"
+quality = "balanced"
+tone_mapping = "auto"
+hdr_passthrough = "auto"
+target_peak = "auto"
+deband = false
+interpolation = false
+sync = "audio"
+default_aspect = "auto"
+linux_force_xwayland = false
+
+[audio]
+device = "auto"
+preferred_languages = ["eng", "en"]
+remember_volume = true
+default_volume = 100.0
+max_volume = 130
+normalize = false
+channels = "auto"
+passthrough = []
+exclusive = false
+equalizer_enabled = false
+equalizer_preset = "flat"
+gapless = "weak"
+replaygain = "off"
+
+[subtitles]
+preferred_languages = ["eng", "en"]
+show_by_default = true
+forced_only_when_audio_matches = true
+auto_load = "fuzzy"
+extra_dirs = ["Subs", "Subtitles", "subs"]
+font = ""
+font_size = 42.0
+scale = 1.0
+bold = false
+color = "#FFFFFF"
+outline_color = "#000000"
+outline_size = 3.0
+shadow_offset = 0.0
+background = "none"
+position = 100
+margin_y = 30
+ass_override = "scale"
+fix_timing = false
+encoding = "auto"
+
+[library]
+track_history = true
+scan_on_startup = true
+watch_folders = true
+group_series = true
+extra_extensions = []
+ignore_patterns = ["**/.*", "**/*sample*"]
+recent_limit = 50
+
+[network]
+use_ytdlp = true
+ytdlp_format = "bestvideo[height<=?2160]+bestaudio/best"
+user_agent = ""
+proxy = ""
+cache_secs = 30
+timeout_s = 20
+auto_reconnect = true
+hls_bitrate = "max"
+load_remote_artwork = false
+
+[performance]
+demuxer_cache_mb = 512
+demuxer_back_cache_mb = 128
+readahead_secs = 20
+software_threads = 0
+thumbnail_hwdec = "auto-copy"
+waveform = "on_demand"
+cache_limit_mb = 1024
+webkit_dmabuf = "auto"
+
+# Advanced, file-only (§5.11).
+[mpv]
+load_user_config = false
+
+[mpv.options]
+
+[env]

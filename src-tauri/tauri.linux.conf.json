@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "targets": ["rpm"],
+    "linux": {
+      "rpm": {
+        "depends": ["mpv-libs", "webkit2gtk4.1", "gtk3", "libepoxy"]
+      }
+    }
+  }
+}
