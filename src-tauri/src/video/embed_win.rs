@@ -1,11 +1,16 @@
 //! Windows Embed backend (ARCHITECTURE §5.2).
 //!
-//! We own a child window at the bottom of the top-level window's z-order and hand it to mpv as
-//! `wid`. mpv creates its D3D11 swapchain inside it; the transparent WebView2 sits above and
-//! receives all input. Owning the host (instead of passing the top-level HWND) keeps the
-//! z-order deterministic. The host must not clip against its siblings — see `create_host`.
+//! We own a host window and hand it to mpv as `wid`; mpv creates its D3D11 swapchain inside it.
+//! Once the main window exists the host becomes its bottom-most child, so the transparent
+//! WebView2 above composites over the video and receives all input.
+//!
+//! The host is created *before* the main window (hidden, top-level) so mpv can bring up its
+//! video output and open the first file while the webview is still starting; `bind` then
+//! reparents it. Owning the host (instead of passing the top-level HWND) also keeps the
+//! z-order deterministic. The host must not clip against its siblings — see `adopt`.
 
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
@@ -13,9 +18,10 @@ use windows::Win32::Graphics::Gdi::{BLACK_BRUSH, GetStockObject, HBRUSH};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, GetClientRect, HWND_BOTTOM, RegisterClassExW, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos, WM_SIZE, WNDCLASSEXW, WS_CHILD,
-    WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_VISIBLE,
+    CreateWindowExW, DefWindowProcW, GWL_EXSTYLE, GWL_STYLE, GetClientRect, HWND_BOTTOM,
+    RegisterClassExW, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SetParent,
+    SetWindowLongPtrW, SetWindowPos, WM_SIZE, WNDCLASSEXW, WS_CHILD, WS_CLIPCHILDREN,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
 };
 use windows::core::w;
 
@@ -24,28 +30,28 @@ use crate::config::Config;
 use crate::config::schema::{AutoOff, GpuApi};
 use crate::player::mpv::Mpv;
 
+/// Size of the host before it is adopted; mpv resizes with it afterwards.
+const INITIAL_SIZE: (i32, i32) = (1280, 720);
+
 pub struct EmbedSurface {
-    /// The host child window, stored as an integer so the surface is `Send + Sync`.
+    /// The host window, stored as an integer so the surface is `Send + Sync`.
     host: isize,
+    bound: AtomicBool,
     gpu_api: GpuApi,
     hdr_passthrough: bool,
     gpu_vendor: GpuVendor,
 }
 
 impl EmbedSurface {
-    pub fn new(window: &tauri::WebviewWindow, config: &Config) -> Result<Self, VideoError> {
-        let parent = window.hwnd().map_err(|e| VideoError::Create(e.to_string()))?;
-        let parent = parent.0 as isize;
-        let host = create_host(parent)?;
-
-        follow_parent_size(host, parent)?;
-
+    /// Must be called on the main thread (the host's messages are pumped by its event loop).
+    pub fn new(config: &Config) -> Result<Self, VideoError> {
         let gpu_api = match config.video.gpu_api {
             GpuApi::Auto => GpuApi::D3d11,
             other => other,
         };
         Ok(Self {
-            host,
+            host: create_host()?,
+            bound: AtomicBool::new(false),
             gpu_api,
             hdr_passthrough: config.video.hdr_passthrough == AutoOff::Auto
                 && gpu_api == GpuApi::D3d11,
@@ -73,13 +79,16 @@ impl VideoSurface for EmbedSurface {
         ]
     }
 
-    fn attach(&self, _mpv: &Mpv) -> Result<(), VideoError> {
-        // Nothing to do: mpv created its window inside the host during initialisation.
-        Ok(())
+    fn bind(&self, window: &tauri::WebviewWindow, _mpv: &Mpv) -> Result<(), VideoError> {
+        if self.bound.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        let parent = window.hwnd().map_err(|e| VideoError::Attach(e.to_string()))?;
+        adopt(self.host, parent.0 as isize)
     }
 
     fn detach(&self) {
-        // The host is a child of the main window and is destroyed with it.
+        // Once adopted the host is destroyed with the main window; nothing to release here.
     }
 
     fn capabilities(&self) -> Capabilities {
@@ -110,10 +119,10 @@ unsafe extern "system" fn host_proc(
     unsafe { DefWindowProcW(window, message, wparam, lparam) }
 }
 
-fn create_host(parent: isize) -> Result<isize, VideoError> {
+/// Creates the host as a hidden top-level window that never appears in the taskbar.
+fn create_host() -> Result<isize, VideoError> {
     let class_name = w!("vihpluh-video-host");
-    // SAFETY: plain Win32 window creation on the thread that owns `parent` (the main thread);
-    // every pointer passed is valid for the duration of its call.
+    // SAFETY: plain Win32 window creation; every pointer passed is valid for its call.
     unsafe {
         let instance = GetModuleHandleW(None).map_err(|e| VideoError::Create(e.to_string()))?;
         let class = WNDCLASSEXW {
@@ -124,36 +133,60 @@ fn create_host(parent: isize) -> Result<isize, VideoError> {
             lpszClassName: class_name,
             ..Default::default()
         };
-        // Returns 0 when the class already exists (second window in the same process): fine.
+        // Returns 0 when the class already exists: fine.
         RegisterClassExW(&class);
 
-        let mut rect = RECT::default();
-        GetClientRect(hwnd(parent), &mut rect).map_err(|e| VideoError::Create(e.to_string()))?;
-
-        // No WS_CLIPSIBLINGS: with it, the WebView2 sibling above (opaque as far as USER is
-        // concerned) clips the host's visible region to nothing and DWM culls mpv's swapchain
-        // entirely — the window then shows the desktop instead of the video (spike S1).
         let host = CreateWindowExW(
-            WS_EX_NOACTIVATE,
+            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             class_name,
             w!("vihpluh video"),
-            WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN,
+            WS_POPUP | WS_CLIPCHILDREN,
             0,
             0,
-            rect.right - rect.left,
-            rect.bottom - rect.top,
-            Some(hwnd(parent)),
+            INITIAL_SIZE.0,
+            INITIAL_SIZE.1,
+            None,
             None,
             Some(instance.into()),
             None,
         )
         .map_err(|e| VideoError::Create(e.to_string()))?;
-
-        // Below the WebView2 child so the transparent web UI composites over the video.
-        SetWindowPos(host, Some(HWND_BOTTOM), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
-            .map_err(|e| VideoError::Create(e.to_string()))?;
         Ok(host.0 as isize)
     }
+}
+
+/// Makes the host the bottom-most child of the main window and keeps it filling the client
+/// area. Must run on the thread that owns both windows (the main thread).
+fn adopt(host: isize, parent: isize) -> Result<(), VideoError> {
+    // SAFETY: both windows belong to this thread; the style values are valid window styles.
+    unsafe {
+        // Per SetParent's contract: switch from popup to child style first.
+        let child_style = (WS_CHILD | WS_CLIPCHILDREN).0 as isize;
+        SetWindowLongPtrW(hwnd(host), GWL_STYLE, child_style);
+        SetWindowLongPtrW(hwnd(host), GWL_EXSTYLE, WS_EX_NOACTIVATE.0 as isize);
+        SetParent(hwnd(host), Some(hwnd(parent))).map_err(|e| VideoError::Attach(e.to_string()))?;
+        // Windows forces WS_CLIPSIBLINGS onto top-level windows, so the bit survives the first
+        // call above; clear it now that the host is a child. It must be off: with it, the
+        // WebView2 sibling above (opaque as far as USER is concerned) clips the host's visible
+        // region to nothing and DWM culls mpv's swapchain entirely — the window then shows
+        // the desktop instead of the video (spike S1).
+        SetWindowLongPtrW(hwnd(host), GWL_STYLE, child_style);
+
+        let mut rect = RECT::default();
+        GetClientRect(hwnd(parent), &mut rect).map_err(|e| VideoError::Attach(e.to_string()))?;
+        // Below the WebView2 child so the transparent web UI composites over the video.
+        SetWindowPos(
+            hwnd(host),
+            Some(HWND_BOTTOM),
+            0,
+            0,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
+            SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW,
+        )
+        .map_err(|e| VideoError::Attach(e.to_string()))?;
+    }
+    follow_parent_size(host, parent)
 }
 
 /// Subclass id for the size-tracking hook on the main window.
@@ -168,7 +201,7 @@ fn follow_parent_size(host: isize, parent: isize) -> Result<(), VideoError> {
     let installed =
         unsafe { SetWindowSubclass(hwnd(parent), Some(parent_proc), SUBCLASS_ID, host as usize) };
     if !installed.as_bool() {
-        return Err(VideoError::Create("could not hook the main window's size changes".into()));
+        return Err(VideoError::Attach("could not hook the main window's size changes".into()));
     }
     fit_to_parent(host, parent);
     Ok(())

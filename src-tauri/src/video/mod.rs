@@ -30,8 +30,10 @@ pub enum VideoError {
 pub trait VideoSurface: Send + Sync {
     /// mpv options that must be set before `mpv_initialize` (vo, wid, gpu-api, …).
     fn init_options(&self) -> Vec<(&'static str, String)>;
-    /// Called once after `mpv_initialize`; creates the render context where applicable.
-    fn attach(&self, mpv: &Mpv) -> Result<(), VideoError>;
+    /// Called once, on the main thread, when the main window exists (mpv is already
+    /// initialised): moves the surface into the window, creating the render context where
+    /// applicable.
+    fn bind(&self, window: &tauri::WebviewWindow, mpv: &Mpv) -> Result<(), VideoError>;
     /// Tears down GPU resources. Must run before the mpv handle is destroyed.
     fn detach(&self);
     fn capabilities(&self) -> Capabilities;
@@ -108,23 +110,21 @@ impl Backend {
     }
 }
 
-/// Creates the surface for this platform. Must be called on the main thread, after the main
-/// window exists and before mpv is initialised.
-pub fn create(
-    window: &tauri::WebviewWindow,
-    config: &Config,
-) -> Result<Arc<dyn VideoSurface>, VideoError> {
+/// Creates the surface for this platform. Must be called on the main thread, before mpv is
+/// initialised. The main window does not need to exist yet: the surface joins it in
+/// [`VideoSurface::bind`], which lets mpv start up in parallel with the webview.
+pub fn create(config: &Config) -> Result<Arc<dyn VideoSurface>, VideoError> {
     #[cfg(windows)]
     {
-        Ok(Arc::new(embed_win::EmbedSurface::new(window, config)?))
+        Ok(Arc::new(embed_win::EmbedSurface::new(config)?))
     }
     #[cfg(target_os = "linux")]
     {
-        Ok(Arc::new(render_gtk::RenderSurface::new(window, config)?))
+        Ok(Arc::new(render_gtk::RenderSurface::new(config)?))
     }
     #[cfg(not(any(windows, target_os = "linux")))]
     {
-        let _ = (window, config);
+        let _ = config;
         Err(VideoError::Unsupported("this platform has no video backend".to_string()))
     }
 }

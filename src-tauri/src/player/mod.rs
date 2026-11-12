@@ -10,7 +10,7 @@ pub mod options;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -62,6 +62,8 @@ pub struct DebugStats {
 
 pub const EVENT_DEBUG_STATS: &str = "debug://stats";
 
+const OBSERVE_HWDEC: u64 = 1;
+
 /// Cheap, cloneable access to the player for IPC handlers.
 pub struct Player {
     mpv: Mutex<Option<Arc<Mpv>>>,
@@ -70,7 +72,9 @@ pub struct Player {
     threads: Mutex<Vec<JoinHandle<()>>>,
     stopping: Arc<AtomicBool>,
     hwdec_chain: String,
-    versions: Versions,
+    versions: OnceLock<Versions>,
+    /// Set once the Tauri app exists; until then the core has nobody to emit to.
+    app: Arc<OnceLock<AppHandle>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -80,9 +84,12 @@ pub struct Versions {
 }
 
 impl Player {
-    /// Creates the primary mpv handle, attaches the video surface, and starts the threads.
+    /// Creates the primary mpv handle and starts the threads.
+    ///
+    /// This runs before the Tauri app and its window exist, so mpv can bring up its video
+    /// output and start opening a file while the webview is still starting. Call
+    /// [`Player::attach`] once the window is there.
     pub fn start(
-        app: AppHandle,
         config: &Config,
         surface: Arc<dyn VideoSurface>,
         cli_mpv_opts: &[(String, String)],
@@ -112,19 +119,9 @@ impl Player {
         }
         mpv.initialize()?;
         mpv.request_log_messages("warn")?;
-        surface.attach(&mpv)?;
-
-        let versions = Versions {
-            mpv: mpv.get_string("mpv-version").unwrap_or_default(),
-            ffmpeg: mpv.get_string("ffmpeg-version").unwrap_or_default(),
-        };
-        tracing::info!(
-            mpv = %versions.mpv,
-            ffmpeg = %versions.ffmpeg,
-            backend = caps.backend.as_str(),
-            hwdec = %chain,
-            "player started"
-        );
+        // Nothing here may wait on mpv's core: it is busy creating the video output, and this
+        // is the main thread.
+        tracing::info!(backend = caps.backend.as_str(), hwdec = %chain, "player started");
 
         let mpv = Arc::new(mpv);
         let stopping = Arc::new(AtomicBool::new(false));
@@ -137,11 +134,14 @@ impl Player {
                 .spawn(move || event_loop(&mpv, &tx, &stopping))
                 .map_err(|e| PlayerError::Thread("mpv-events", e))?
         };
+        mpv.observe(OBSERVE_HWDEC, "hwdec-current", mpv::Format::String)?;
+        let app = Arc::new(OnceLock::new());
         let core = {
-            let mpv = mpv.clone();
+            let (mpv, app) = (mpv.clone(), app.clone());
+            let hwdec_requested = chain != "no";
             std::thread::Builder::new()
                 .name("core".into())
-                .spawn(move || Core { app, mpv }.run(&core_rx))
+                .spawn(move || Core { app, mpv, hwdec_requested }.run(&core_rx))
                 .map_err(|e| PlayerError::Thread("core", e))?
         };
 
@@ -152,16 +152,35 @@ impl Player {
             threads: Mutex::new(vec![events, core]),
             stopping,
             hwdec_chain: chain,
-            versions,
+            versions: OnceLock::new(),
+            app,
         }))
+    }
+
+    /// Connects the player to the app and its main window: events start flowing to the
+    /// frontend and the video surface moves into the window. Main thread only.
+    pub fn attach(&self, app: AppHandle, window: &tauri::WebviewWindow) -> Result<(), PlayerError> {
+        let _ = self.app.set(app);
+        if let Some(mpv) = self.mpv() {
+            self.surface.bind(window, &mpv)?;
+        }
+        Ok(())
     }
 
     fn mpv(&self) -> Option<Arc<Mpv>> {
         self.mpv.lock().ok().and_then(|guard| guard.clone())
     }
 
+    /// mpv and FFmpeg versions. The first call waits for mpv's core, so keep it off the main
+    /// thread during startup.
     pub fn versions(&self) -> &Versions {
-        &self.versions
+        self.versions.get_or_init(|| match self.mpv() {
+            Some(mpv) => Versions {
+                mpv: mpv.get_string("mpv-version").unwrap_or_default(),
+                ffmpeg: mpv.get_string("ffmpeg-version").unwrap_or_default(),
+            },
+            None => Versions::default(),
+        })
     }
 
     pub fn hwdec_chain(&self) -> &str {
@@ -254,13 +273,14 @@ fn forward_log(prefix: &str, level: &str, text: &str) {
 
 /// The single-threaded state owner.
 struct Core {
-    app: AppHandle,
+    app: Arc<OnceLock<AppHandle>>,
     mpv: Arc<Mpv>,
+    /// False when the user turned hardware decoding off, so software decoding is expected.
+    hwdec_requested: bool,
 }
 
 impl Core {
     fn run(self, rx: &Receiver<CoreMsg>) {
-        let mut last_stats = DebugStats::default();
         loop {
             match rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(CoreMsg::Shutdown) | Err(RecvTimeoutError::Disconnected) => break,
@@ -268,24 +288,46 @@ impl Core {
                 Err(RecvTimeoutError::Timeout) => {}
             }
             if cfg!(debug_assertions) {
-                let stats = self.debug_stats();
-                if stats != last_stats {
-                    let _ = self.app.emit(EVENT_DEBUG_STATS, &stats);
-                    last_stats = stats;
-                }
+                self.emit(EVENT_DEBUG_STATS, &self.debug_stats());
+            }
+        }
+    }
+
+    fn emit<T: Serialize + Clone>(&self, event: &str, payload: &T) {
+        if let Some(app) = self.app.get() {
+            if let Err(err) = app.emit(event, payload) {
+                tracing::debug!("could not emit {event}: {err}");
             }
         }
     }
 
     fn on_mpv_event(&self, event: Event) {
         match event {
-            Event::FileLoaded => tracing::info!("file loaded"),
+            Event::FileLoaded => tracing::debug!("file loaded"),
+            Event::PlaybackRestart => tracing::debug!("playback restart (first frame shown)"),
             Event::EndFile { reason, error } => {
                 tracing::info!(?reason, ?error, "end of file");
             }
             Event::AsyncError { id, error } => tracing::warn!(id, "mpv command failed: {error}"),
             Event::Shutdown => tracing::info!("mpv shut down"),
+            Event::PropertyChange { id: OBSERVE_HWDEC, value, .. } => {
+                self.on_hwdec_changed(value.as_str().unwrap_or(""));
+            }
             _ => {}
+        }
+    }
+
+    /// The cause of any stutter should never be a mystery (ARCHITECTURE §5.4): say so when a
+    /// file ends up on the software decoder although hardware decoding was requested.
+    fn on_hwdec_changed(&self, current: &str) {
+        match current {
+            "" => {}
+            "no" if self.hwdec_requested => {
+                let codec = self.mpv.get_string("video-codec").unwrap_or_default();
+                tracing::warn!("software decoding: no hardware decoder available for {codec}");
+            }
+            "no" => tracing::info!("software decoding (hardware decoding is turned off)"),
+            decoder => tracing::info!("hardware decoding with {decoder}"),
         }
     }
 

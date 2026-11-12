@@ -31,8 +31,9 @@ behind a UI inspired by Juxtopposed's VLC redesign. Windows 10/11 first, Fedora 
 at parity. Public MIT repo, but built for one person's daily use — no telemetry, no onboarding, no
 accounts, no update nags, no network traffic unless a stream is opened.
 
-**Current status:** blueprint complete, no application code yet. Next step is **Phase 1** in
-[`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). Update this line when a phase closes.
+**Current status:** Phase 1 closed on Windows (Linux pending: spike S2 and the render backend need the
+Fedora machine). Next step is **Phase 2** in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+Update this line when a phase closes.
 
 ## Document map — read the relevant one before touching that area
 
@@ -131,7 +132,13 @@ Dev runs use a repo-local data root so personal config is never touched: `VIHPLU
 
 - **Windows:** video is a native child window *under* a transparent WebView2. The page background must
   stay transparent wherever video should show; an opaque full-window element hides the video.
-  `libmpv-2.dll` must sit next to the executable.
+  `libmpv-2.dll` must sit next to the executable. The video host window must never get
+  `WS_CLIPSIBLINGS` (the video disappears entirely — ARCHITECTURE §5.2).
+- **Windows toolchains:** MSVC is the documented default; the GNU toolchain + MinGW-w64 GCC also builds
+  (ARCHITECTURE §12.1). Rust tests belong in the library's unit-test binary, not `src-tauri/tests/` (D17).
+- **Verifying in the running app:** set `VIHPLUH_QUIET_TEST=1` (debug builds) so the window opens without
+  taking focus, and pass `--mpv-opt mute=yes`. The owner uses this machine while work is in progress:
+  verification must not steal focus, play sound, move the pointer, or capture the screen.
 - **Linux:** video is rendered through libmpv's render API into a `GtkGLArea` under a transparent
   WebKitGTK webview — `--wid` embedding does not work here (and is impossible on Wayland). All GL calls
   happen on the GTK main thread inside the `render` signal.

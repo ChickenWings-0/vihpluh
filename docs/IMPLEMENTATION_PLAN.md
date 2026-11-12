@@ -73,7 +73,7 @@ Public sources for clips: the Jellyfin test-videos repository, Kodi's sample pag
 
 ---
 
-## 3. Phase 1 — Foundations and de-risking spikes — ☐ not started
+## 3. Phase 1 — Foundations and de-risking spikes — ☑ closed (Windows, 2026-11-12) — Linux pending
 
 **Goal:** a window on both OSes that plays a file with hardware decoding under a transparent web UI,
 proving the two riskiest assumptions before any feature work. Spikes are throwaway-quality code on `spike/*`
@@ -81,18 +81,19 @@ branches; the scaffold tasks are production-quality on `main`.
 
 ### 3.1 Toolchain and scaffold
 
-- [ ] Windows toolchain per A§12.1; Fedora toolchain per A§12.2. `rustc`, `node`, `pnpm` versions noted in the phase notes.
-- [ ] `scripts/fetch-libmpv.ps1`: pinned release tag + SHA-256, extract, generate `mpv.lib`, idempotent (**spike S3**).
-- [ ] `scripts/check-deps.sh`: verifies Fedora packages, full FFmpeg (HEVC decoder present), `vainfo` profiles / `nvidia-smi`, session type; exits non-zero with a readable list.
-- [ ] Scaffold Tauri 2 + React 19 + Vite + TypeScript strict + Tailwind 4 with the tree from A§3 (only directories needed now).
-- [ ] `package.json` scripts: `dev`, `build`, `check`, `gen:bindings`, `fetch:libmpv`, `tauri`. `tauri dev` sets `VIHPLUH_HOME=./.local`.
-- [ ] Biome config, `tsconfig` (strict, `noUncheckedIndexedAccess`), Vitest; `rustfmt.toml`, clippy lints (`unwrap_used`, `expect_used` = warn in non-test code).
-- [ ] `src-tauri/build.rs`: link search path + copy `libmpv-2.dll` beside the dev executable (Windows); `pkg-config mpv` (Linux).
-- [ ] `tauri.conf.json`: single window `main`, `transparent: true`, `decorations: false`, `visible: false`, min size 480 × 270; CSP from A§13; capabilities file with nothing but core window permissions.
-- [ ] `paths.rs` (A§9.1 incl. `--home` / `VIHPLUH_HOME` / portable marker), `logging.rs` (rotating file + stderr), `error.rs` (`AppError`).
-- [ ] `src/styles/tokens.css` with every token from D§2–D§4, D§12; Tailwind `@theme` mapping from D§14; transparent page root.
-- [ ] `src/ipc/transport.ts` as the sole importer of `@tauri-apps/api` (lint rule: `noRestrictedImports` elsewhere).
-- [ ] ts-rs wiring: one DTO (`AppInfo`) exported end-to-end through `pnpm gen:bindings`.
+- [x] Windows toolchain per A§12.1 — via the GNU alternative (A§12.1, D15); see the phase notes. `rustc`, `node`, `pnpm` versions noted there.
+- [ ] Fedora toolchain per A§12.2.
+- [x] `scripts/fetch-libmpv.ps1`: pinned release tag + SHA-256, extract, generate `mpv.lib`, idempotent (**spike S3**). *(The `mpv.lib` step is written but has not run yet: no llvm-dlltool / lib.exe on the dev machine.)*
+- [ ] `scripts/check-deps.sh`: verifies Fedora packages, full FFmpeg (HEVC decoder present), `vainfo` profiles / `nvidia-smi`, session type; exits non-zero with a readable list. *(Written and syntax-checked; not yet run on **L**.)*
+- [x] Scaffold Tauri 2 + React 19 + Vite + TypeScript strict + Tailwind 4 with the tree from A§3 (only directories needed now).
+- [x] `package.json` scripts: `dev`, `build`, `check`, `gen:bindings`, `fetch:libmpv`, `tauri`. `tauri dev` sets `VIHPLUH_HOME=./.local`.
+- [x] Biome config, `tsconfig` (strict, `noUncheckedIndexedAccess`), Vitest; `rustfmt.toml`, clippy lints (`unwrap_used`, `expect_used` = warn in non-test code).
+- [x] `src-tauri/build.rs`: link search path + copy `libmpv-2.dll` beside the dev executable (Windows); `pkg-config mpv` (Linux). *(Linux branch unexercised.)*
+- [x] `tauri.conf.json`: single window `main`, `transparent: true`, `decorations: false`, `visible: false`, min size 480 × 270; CSP from A§13; capabilities file with nothing but core window permissions.
+- [x] `paths.rs` (A§9.1 incl. `--home` / `VIHPLUH_HOME` / portable marker), `logging.rs` (rotating file + stderr), `error.rs` (`AppError`).
+- [x] `src/styles/tokens.css` with every token from D§2–D§4, D§12; Tailwind `@theme` mapping from D§14; transparent page root.
+- [x] `src/ipc/transport.ts` as the sole importer of `@tauri-apps/api` (lint rule: `noRestrictedImports` elsewhere).
+- [x] ts-rs wiring: one DTO (`AppInfo`) exported end-to-end through `pnpm gen:bindings`.
 
 ### 3.2 Spikes (each produces a short findings note in the phase notes, then code is rewritten properly)
 
@@ -105,25 +106,75 @@ branches; the scaffold tasks are production-quality on `main`.
 
 ### 3.3 First-frame slice (production code)
 
-- [ ] `video/mod.rs` trait + `Capabilities`; `embed_win.rs` (from S1) and `render_gtk.rs` (from S2) implemented cleanly.
-- [ ] `player/mpv.rs` wrapper; primary handle created with A§6.2 options; mpv log forwarding.
-- [ ] `player/hwdec.rs` chain selection (A§5.4) with unit tests for every row of the table.
-- [ ] `cli.rs` (A§4.6): positional file plays on launch; `--version` prints app/mpv/ffmpeg/backend.
-- [ ] Window shows only after frontend `app_ready`; clean shutdown (A§4.4) with watchdog.
-- [ ] Temporary debug overlay (dev builds only): `hwdec-current`, backend, session, dropped frames.
+- [x] `video/mod.rs` trait + `Capabilities`; `embed_win.rs` (from S1) implemented cleanly.
+- [ ] `render_gtk.rs` (from S2) implemented cleanly. *(A no-video placeholder until S2 runs on **L**.)*
+- [x] `player/mpv.rs` wrapper; primary handle created with A§6.2 options; mpv log forwarding.
+- [x] `player/hwdec.rs` chain selection (A§5.4) with unit tests for every row of the table.
+- [x] `cli.rs` (A§4.6): positional file plays on launch; `--version` prints app/mpv/ffmpeg/backend. *(Folder and `.m3u` expansion arrive with the queue in Phase 4 and the IPTV parser in Phase 9.)*
+- [x] Window shows only after frontend `app_ready`; clean shutdown (A§4.4) with watchdog.
+- [x] Temporary debug overlay (dev builds only): `hwdec-current`, backend, session, dropped frames.
 
 ### Verification
 
-- [ ] `vihpluh test-media/T1.mkv` shows video within the A§14 first-frame budget on **W**; debug overlay reports `d3d11va`.
+- [x] `vihpluh test-media/T1.mkv` shows video within the A§14 first-frame budget on **W**; debug overlay reports `d3d11va`. *(756–913 ms on an idle machine, debug build — borderline; see notes.)*
 - [ ] Same on **L** Wayland (expected decoder per GPU) and **L** X11.
-- [ ] T2 (AV1) plays on all three; decoder reported; software fallback emits a log line when hwdec is unavailable.
-- [ ] `video.hwdec = "off"` in `.local/config/config.toml` forces software decoding (`hwdec-current = no`).
-- [ ] Closing the window exits the process within 2 s on all three; no orphan processes.
+- [ ] T2 (AV1) plays on all three; decoder reported; software fallback emits a log line when hwdec is unavailable. *(**W** ✓: `d3d11va`, 0 drops; forced fallback logs "software decoding: no hardware decoder available for …".)*
+- [x] `video.hwdec = "off"` in `.local/config/config.toml` forces software decoding (`hwdec-current = no`).
+- [ ] Closing the window exits the process within 2 s on all three; no orphan processes. *(**W** ✓: 140–205 ms, no orphans.)*
 - [ ] `scripts/check-deps.sh` passes on **L**; with `ffmpeg-free` deliberately in place it reports the missing HEVC decoder.
 - [ ] A fresh clone builds on both OSes following only README instructions.
-- [ ] All four spike notes written; A§15 risk table updated with outcomes; every `⚠ VERIFY` marker in ARCHITECTURE resolved or rewritten.
+- [ ] All four spike notes written; A§15 risk table updated with outcomes; every `⚠ VERIFY` marker in ARCHITECTURE resolved or rewritten. *(S1, S3, S4 written and their markers resolved; the four remaining markers all belong to S2.)*
 
 **Platforms:** W + L-Wayland + L-X11 (mandatory — this phase exists to prove them).
+
+### Phase 1 notes (2026-11-12, Windows only)
+
+**Machine W.** Windows 11 Home 10.0.26200 · Ryzen 9 7940HS · NVIDIA RTX 4070 Laptop (driver 32.0.16.2114) +
+Radeon 780M (32.0.11020.1002) · 2560 × 1440 at 125 %. `rustc 1.99.1` (`stable-x86_64-pc-windows-gnu`),
+`node 24.19.0`, `pnpm 9.15.9`, libmpv `0.42.0-38-gbcde6b93c` (shinchiro 20261111).
+
+**Toolchain.** The MSVC Build Tools install needs administrator rights and was not granted during this
+run, so Phase 1 was built with the GNU Rust toolchain and the MinGW-w64 GCC already present in MSYS2
+(A§12.1 "GNU toolchain alternative", D15). The README's MSVC path is therefore still unverified.
+
+**Linux.** No Fedora machine was available. S2, `render_gtk.rs`, `check-deps.sh`, and every **L** line
+above stay open; the debt is carried under the "Linux pending" rule of §1.
+
+**S1 — Windows embed: pass.** T1 (4K HEVC Main 10, 61 Mb/s) plays with `hwdec-current = d3d11va`, 0 dropped
+frames; a 50 %-alpha box and a spinning CSS element composite over the video; pointer moves and clicks
+reach the webview; resize and maximize/restore track correctly (host and mpv window follow the client
+area). Findings: (1) the host **must not** have `WS_CLIPSIBLINGS` — with it nothing of the video is
+composited at all; Windows re-adds the bit to top-level windows, so it is cleared after reparenting.
+(2) GDI content in the transparent window is invisible (alpha 0); only the swapchain shows. Not covered:
+fullscreen (needs `window_set_mode`, Phase 3) and a monitor/DPI change (single display; Phase 11).
+
+**S2 — Linux render: not run.**
+
+**S3 — libmpv linking: pass with the GNU toolchain.** Archive contents: `libmpv-2.dll` (122 MB),
+`libmpv.dll.a`, `include/mpv/{client,render,render_gl,stream_cb}.h`; no `mpv.def` (the script generates it
+from the DLL's export table: 54 symbols). `cargo build` links against `libmpv.dll.a`; the DLL is copied
+beside the executable; `pnpm tauri build --no-bundle` produces a 13 MB `vihpluh.exe` (plus
+`WebView2Loader.dll`, which the GNU target links dynamically). Not covered: the MSVC `mpv.lib` route and a
+run on a clean user profile.
+
+**S4 — mpv feature probes: pass (Windows).** Code on branch `spike/s4`.
+(a) `af-command vihpluh-eq gain 12 equalizer@b0` raised a 1 kHz tone by exactly 12.0 dB with the `af`
+chain untouched; an off-frequency band left it alone; `af-command … volume -6dB volume` moved the preamp.
+(b) Software render context after paused keyframe seeks: 6/6 frames each; 12–28 ms (1080p H.264),
+60–75 ms (4K HEVC via `d3d11va-copy`), 30–400 ms (4K HEVC software).
+(c) `ao=pcm` into a Windows named pipe: 90 s of audio in 0.29 s (~300× realtime).
+(d) Every generated option name/value is accepted by the pinned build (unit test).
+(e) `video-margin-ratio-right = 0.3` repositions the picture live on the Embed backend.
+(f) `flip_h.glsl` mirrors the picture with `hwdec-current` still `d3d11va`; the subtitle stays unmirrored.
+
+**Start-up timing** (debug build, idle machine, ms after process spawn): window visible with no file
+540–630 (budget 500); first frame 615–845 for T3 and 756–913 for T1 (budget 900). Under load (a video
+call running, < 2 GB free RAM) the same runs took up to 1.8 s. mpv is created before Tauri so it runs in
+parallel with WebView2 start-up (D18). To revisit with a release build in the Phase 11 performance pass.
+
+**Also learned.** mpv's built-in scripts load despite `load-scripts=no` and are switched off one by one
+(D16). A separate integration-test binary cannot start (D17). The first launch after every rebuild takes
+~10 s because the new executable is scanned by Defender; it is not an app regression.
 
 ---
 

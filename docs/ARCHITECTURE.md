@@ -5,7 +5,9 @@ storage schemas, and build/runtime dependencies. Companion docs:
 [DESIGN_SYSTEM](DESIGN_SYSTEM.md) · [KEYBINDS_AND_CONFIG](KEYBINDS_AND_CONFIG.md) · [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md).
 
 Items marked **⚠ VERIFY (Sx)** are assumptions that a named Phase 1 spike must confirm before code
-depends on them (IMPLEMENTATION_PLAN §3).
+depends on them (IMPLEMENTATION_PLAN §3). Items marked **✔ VERIFIED (Sx)** were confirmed by that spike
+on Windows (2026-11-12, pinned libmpv 0.42.0-38); the remaining ⚠ markers all belong to S2, which needs
+the bare-metal Fedora machine.
 
 ## Contents
 
@@ -57,7 +59,7 @@ depends on them (IMPLEMENTATION_PLAN §3).
 |---|---|---|
 | App shell | **Tauri 2** (2.11.x at time of writing) | System webview: WebView2 (Windows), WebKitGTK 4.1 (Linux). |
 | Core language | **Rust** stable, edition 2024 | Single `vihpluh` binary. |
-| Playback engine | **libmpv** ≥ 0.40 (client API 2.x); develop against 0.42 | Bound through the `libmpv2` crate (5.x, `render` feature) with direct `libmpv2-sys` calls where the safe API is missing something. |
+| Playback engine | **libmpv** ≥ 0.40 (client API 2.x); develop against 0.42 | Bound through **`libmpv2-sys`** (the raw bindings of the `libmpv2` crate family, pregenerated — no bindgen/libclang needed) behind our own thin safe wrapper, `player/mpv.rs` (D14). |
 | UI | **TypeScript + React 19 + Vite + Tailwind CSS 4** | Zustand (state), Radix UI primitives (unstyled a11y behavior), dnd-kit (drag/drop), `@tanstack/react-virtual` (long lists). |
 | IPC typing | **`ts-rs`** | Rust DTOs derive `TS`; bindings generated into `src/ipc/bindings/`. (`tauri-specta` rejected: still release-candidate.) |
 | Persistence | **TOML** (`toml` + `toml_edit`), **JSON** (`serde_json`), **SQLite** (`rusqlite`, bundled) | See §9. |
@@ -112,7 +114,8 @@ vihpluh/
 ├── scripts/
 │   ├── fetch-libmpv.ps1          # Windows: download + verify pinned libmpv, generate mpv.lib
 │   ├── check-deps.sh             # Fedora: verify dnf packages, codecs, VA-API/NVDEC
-│   └── gen-bindings.mjs          # runs the ts-rs export test, formats output
+│   ├── gen-bindings.mjs          # runs the ts-rs export tests (output dir set in .cargo/config.toml)
+│   └── tauri.mjs                 # Tauri CLI wrapper: `dev` gets VIHPLUH_HOME=./.local
 ├── src/                          # ── frontend ──
 │   ├── main.tsx  App.tsx
 │   ├── ipc/
@@ -155,13 +158,14 @@ vihpluh/
         │   ├── events.rs         # event names + emit helpers
         │   └── commands/         # player.rs tracks.rs audio.rs sub.rs video.rs queue.rs
         │                         #  bookmark.rs preset.rs library.rs playlist.rs config.rs
-        │                         #  window.rs media.rs app.rs
+        │                         #  window.rs media.rs app.rs debug.rs (debug builds only)
         ├── player/
         │   ├── mod.rs            # PlayerCore actor + PlayerHandle
         │   ├── mpv.rs            # thin safe wrapper over libmpv2 / libmpv2-sys
         │   ├── state.rs          # PlayerState + reducer
         │   ├── observe.rs        # property observation table
         │   ├── hwdec.rs          # decode-chain selection (§5.4)
+        │   ├── options.rs        # mpv init options (§6.2)
         │   ├── tracks.rs  filters.rs  equalizer.rs  sleep.rs
         ├── video/
         │   ├── mod.rs            # trait VideoSurface, Capabilities
@@ -247,10 +251,16 @@ event thread**, so there is exactly one path by which `PlayerState` mutates.
 1. `main()`: resolve paths (§9.1) → init logging → load config (defaults ⊕ user file) → set process
    env that must precede toolkit init (Linux: `WEBKIT_DISABLE_DMABUF_RENDERER`, `GDK_BACKEND` overrides; §5.3).
 2. Parse CLI (§4.6). If another instance is running, `single-instance` forwards argv to it and this process exits.
-3. Build Tauri app; create main window **hidden**, transparent, undecorated (unless `interface.window_decorations = "native"`).
-4. Create `VideoSurface` for the platform; create primary mpv handle with init options (§6.2); attach surface.
-5. Start `mpv-events`, `core`, `db` threads. Open DB, run migrations.
-6. Restore session (queue) if `general.restore_session`; apply CLI open-request if any.
+3. Create the `VideoSurface` for the platform and the primary mpv handle with init options (§6.2); start
+   the `mpv-events` and `core` threads; apply the CLI open-request if any. This happens **before** Tauri
+   starts, so mpv brings up its video output and opens the first file while the webview (the slow part of
+   startup, ~350 ms) initialises (D18). Nothing on this path may wait on mpv's core.
+4. Build Tauri app; create main window **hidden**, transparent, undecorated (unless `interface.window_decorations = "native"`).
+   The window is declared in `tauri.conf.json` with `"create": false` and built in `setup` so its webview
+   storage can be pointed at `<data>/webview` (keeps `--home` / portable mode self-contained).
+   Then `Player::attach` binds the surface into the window and gives the core its `AppHandle`.
+5. Start the `db` thread. Open DB, run migrations.
+6. Restore session (queue) if `general.restore_session`.
 7. Frontend mounts → calls `app_info`, `config_get`, `keybinds_get`, `player_snapshot`, `queue_snapshot` in parallel → subscribes to events → signals `app_ready` → Rust shows the window.
 
 The window is shown only after first paint to avoid a white/transparent flash.
@@ -303,12 +313,15 @@ attach to the parent console (`AttachConsole(ATTACH_PARENT_PROCESS)`) before pri
 pub trait VideoSurface: Send + Sync {
     /// mpv options that must be set before mpv_initialize (vo, wid, gpu-api, …).
     fn init_options(&self) -> Vec<(&'static str, String)>;
-    /// Called once after mpv_initialize; creates render context where applicable.
-    fn attach(&self, mpv: &Mpv) -> Result<(), VideoError>;
+    /// Called once on the main thread when the main window exists (mpv is already initialised):
+    /// moves the surface into the window; creates the render context where applicable.
+    fn bind(&self, window: &tauri::WebviewWindow, mpv: &Mpv) -> Result<(), VideoError>;
     /// Tear down GPU resources. Must run before the mpv handle is destroyed.
     fn detach(&self);
     fn capabilities(&self) -> Capabilities;
 }
+
+// video::create(&config) builds the surface *before* the window exists (D18).
 
 pub struct Capabilities {            // serialised to the frontend via app_info
     pub backend: Backend,            // Embed | Render
@@ -339,14 +352,26 @@ beside the video shrink the picture through mpv's `video-margin-ratio-{left,righ
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- Create our own `WS_CHILD | WS_CLIPSIBLINGS` host window sized to the client area, placed at `HWND_BOTTOM`;
-  resize it on `WM_SIZE`. Pass its handle as `wid`. Owning the host (rather than passing the top-level
-  HWND) gives deterministic z-order below WebView2.
+- Create our own host window and pass its handle as `wid`. It starts life as a hidden top-level
+  `WS_POPUP` (tool window, never activated) so mpv can initialise before the main window exists; `bind`
+  then reparents it (`SetParent`) as a `WS_CHILD | WS_CLIPCHILDREN` window sized to the client area at
+  `HWND_BOTTOM`, and resizes it on the parent's `WM_SIZE` (window subclass). Owning the host (rather than
+  passing the top-level HWND) gives deterministic z-order below WebView2.
+- **The host must not have `WS_CLIPSIBLINGS`.** WebView2's window sits above it and is opaque as far as
+  USER is concerned, so sibling clipping reduces the host's visible region to nothing and DWM then culls
+  mpv's swapchain completely: the window shows the desktop instead of the video (found in S1). Windows
+  forces that bit onto top-level windows, so it is cleared again *after* `SetParent`.
+- GDI content in the transparent top-level window has alpha 0, so the host's own background is invisible;
+  only mpv's swapchain paints. While idle with no VO the window is see-through unless the web UI paints
+  (the idle screen paints `--bg-base`).
 - Window config: `transparent: true`, `decorations: false`, `shadow: true`. Page `html, body { background: transparent }`.
 - All input goes to WebView2. mpv input is disabled (`input-default-bindings=no`, `input-vo-keyboard=no`, `input-cursor=no`, `cursor-autohide=no`).
 - Init options: `vo=gpu-next`, `gpu-api=d3d11`, `gpu-context=d3d11`, `wid=<hwnd>`, `target-colorspace-hint=auto`.
 - HDR: with the display in HDR mode, `gpu-next` + D3D11 passes HDR10 through; otherwise tone-maps per `video.tone_mapping`.
-- **⚠ VERIFY (S1):** transparent WebView2 composites over the sibling child HWND during playback, resize, fullscreen, and DPI change, with no flicker and no input leaks.
+- **✔ VERIFIED (S1):** transparent WebView2 composites over the sibling child HWND during playback, resize, and
+  maximize/restore; a 50 %-alpha box and a CSS animation render over 4K HDR video; all pointer input reaches the
+  webview; `hwdec-current = d3d11va`. Fullscreen is re-checked in Phase 3 (needs `window_set_mode`); a
+  monitor/DPI change could not be exercised on the single-display dev machine and stays on the Phase 11 list.
 
 ### 5.3 Linux — Render backend (`render_gtk.rs`)
 
@@ -544,17 +569,17 @@ An item is marked `finished` at ≥ 95 % and its resume position cleared.
 | Volume | `volume` 0–`audio.max_volume` (default 130); `mute`. |
 | Audio device | `audio-device` from `audio-device-list`; hot-plug updates arrive via the observed list. |
 | Audio delay / sub delay | `audio-delay`, `sub-delay` (seconds; UI in ms). |
-| 10-band / parametric EQ | One labelled filter `@vihpluh-eq:lavfi=[volume=<preamp>dB,equalizer@b0=f=31:t=o:w=1:g=<g0>,…]`. Drag updates use `af-command vihpluh-eq gain <g> equalizer@bN` for glitch-free changes **⚠ VERIFY (S4)**; fallback is replacing the filter, debounced 80 ms. Parametric bands map to `equalizer` (peaking), `bass` (low shelf), `treble` (high shelf). |
+| 10-band / parametric EQ | One labelled filter `@vihpluh-eq:lavfi=[volume=<preamp>dB,equalizer@b0=f=31:t=o:w=1:g=<g0>,…]`. Drag updates use `af-command vihpluh-eq gain <g> equalizer@bN` (and `af-command vihpluh-eq volume <p>dB volume` for the preamp), which change the running filter without rebuilding the chain **✔ VERIFIED (S4:** +12.0 dB measured for a +12 dB command, `af` unchanged**)**; adding/removing bands or changing type/Q replaces the filter, debounced 80 ms. Parametric bands map to `equalizer` (peaking), `bass` (low shelf), `treble` (high shelf). |
 | Loudness normalisation | `@vihpluh-norm:lavfi=[dynaudnorm=g=5:f=250:r=0.9:p=0.5]` toggle. |
 | Brightness/contrast/saturation/gamma/hue | mpv properties of the same names (−100…100), applied on GPU. |
 | Rotate | `video-rotate` (0/90/180/270). |
-| Flip H/V | GPU user shaders `resources/shaders/flip_{h,v}.glsl` toggled via `change-list glsl-shaders toggle` (keeps zero-copy hwdec; subtitles stay readable). Fallback `vf toggle hflip`. |
+| Flip H/V | GPU user shaders `resources/shaders/flip_{h,v}.glsl` (`//!HOOK MAIN`) toggled via `change-list glsl-shaders toggle` (keeps zero-copy hwdec; subtitles stay readable — **✔ VERIFIED (S4)** on the Embed backend: mirrored picture, `hwdec-current` still `d3d11va`, subtitle unmirrored). Fallback `vf toggle hflip`. |
 | Zoom / pan | `video-zoom`, `video-pan-x`, `video-pan-y`. |
 | Aspect / fill | `video-aspect-override`, `panscan`, `keepaspect`. Presets: Auto, 16:9, 4:3, 21:9, 2.39:1, 1:1, Stretch, Fill (crop). |
 | Tone mapping | `tone-mapping`, `tone-mapping-mode`, `hdr-compute-peak`, `target-peak`. Option list is gated by `capabilities.renderer` (some curves are `gpu-next`-only). |
 | Deband / interpolation | `deband`, `interpolation` + `video-sync=display-resample`. |
 | Custom shaders | Files in `<config>/shaders/*.glsl` listed in the Video tab; toggled live with `glsl-shaders`. |
-| Subtitle style | `sub-font`, `sub-font-size`, `sub-color`, `sub-outline-color`, `sub-outline-size`, `sub-shadow-offset`, `sub-back-color`, `sub-border-style`, `sub-bold`, `sub-pos`, `sub-margin-y`, `sub-align-x/y`, `sub-scale`, `sub-ass-override`. **⚠ VERIFY (S4)** exact names against `mpv --list-options` of the pinned build (outline/border names changed across releases). |
+| Subtitle style | `sub-font`, `sub-font-size`, `sub-color`, `sub-outline-color`, `sub-outline-size`, `sub-shadow-offset`, `sub-back-color`, `sub-border-style`, `sub-bold`, `sub-pos`, `sub-margin-y`, `sub-align-x/y`, `sub-scale`, `sub-ass-override`. Background box = `sub-border-style=background-box` + `sub-back-color=#C0000000`; none = `outline-and-shadow`. **✔ VERIFIED (S4):** every name and value is accepted by the pinned build — kept true by the test `linked_libmpv_accepts_every_generated_option`. |
 | Sub sync to cue | `sub-step ±1` (shift delay so the next/previous cue shows now). |
 | Screenshot | `screenshot-to-file` (`subtitles` or `video` mode) → toast with "Reveal". |
 | Sleep timer | Core timer (`player/sleep.rs`): after N min, at end of file, or at end of queue → `pause` or quit per `playback.sleep_action`. Volume fades over the last 10 s. |
@@ -1201,7 +1226,10 @@ One click pairs external subtitle files with the videos in the current folder or
 - **Scheduling:** single worker, latest-wins (a new request cancels all queued ones). While idle it
   pre-generates neighbours of the last hovered bucket (±8).
 - Disabled for network streams, audio-only media, and when `interface.seek_preview = false`.
-- **⚠ VERIFY (S4):** software render API produces frames after a paused keyframe seek without a display; fallback is `screenshot-raw`.
+- **✔ VERIFIED (S4):** the software render API produces a frame after every paused keyframe seek with no display:
+  wait for `MPV_RENDER_UPDATE_FRAME` from `mpv_render_context_update`, then render. Measured per thumbnail at
+  320 × 180: 12–28 ms (1080p H.264, software), 60–75 ms (4K HEVC Main 10, `auto-copy` → `d3d11va-copy`),
+  30–400 ms (4K HEVC, software) — all inside the §14 uncached budget with `auto-copy`.
 
 ### 11.2 Audio waveform (`media/waveform.rs`)
 
@@ -1223,7 +1251,9 @@ One click pairs external subtitle files with the videos in the current folder or
 - Triggered when the seek-bar waveform or the subtitle timeline is first shown for a file
   (`performance.waveform = "on_demand"`), or on every load (`"always"`), or never (`"off"`).
 - Unavailable for network streams (`status: "unavailable"`).
-- **⚠ VERIFY (S4):** `ao-pcm-file` accepts a named pipe on Windows.
+- **✔ VERIFIED (S4):** `ao-pcm-file` accepts a Windows named pipe (`\\.\pipe\…`, created by us with
+  `CreateNamedPipeW`, inbound, byte mode): a 90 s track arrived in 0.29 s (~300× realtime). The Unix FIFO
+  path is checked with S2 on Fedora.
 
 ### 11.3 Subtitle cue index (`subtitles/`)
 
@@ -1270,11 +1300,21 @@ WebView2 Runtime ships with Windows 11 and Windows 10 ≥ 1803 (`winget install 
 2. Verify the SHA-256, extract to `src-tauri/lib/windows-x64/` → `libmpv-2.dll`, `include/mpv/*.h`, and a MinGW import library.
 3. Produce an MSVC-compatible `mpv.lib`: use `mpv.def` from the archive if present, otherwise generate it from
    `dumpbin /exports libmpv-2.dll`; then `llvm-dlltool -m i386:x86-64 -D libmpv-2.dll -d mpv.def -l mpv.lib`
-   (equivalent: `lib /def:mpv.def /name:libmpv-2.dll /out:mpv.lib /machine:x64`). **⚠ VERIFY (S3)** archive contents and that the name passed matches the DLL filename exactly.
+   (equivalent: `lib /def:mpv.def /name:libmpv-2.dll /out:mpv.lib /machine:x64`).
+   **✔ VERIFIED (S3), in part:** the archive holds exactly `libmpv-2.dll`, `libmpv.dll.a` (MinGW import
+   library) and `include/mpv/{client,render,render_gl,stream_cb}.h` — **no `mpv.def`**, so the script
+   always writes one from the DLL's export table (54 `mpv_*` symbols, parsed in PowerShell; no `dumpbin`
+   needed). The MSVC `mpv.lib` step itself is **not yet exercised**: the dev machine has no MSVC or LLVM.
+   The GNU Rust toolchain links `libmpv.dll.a` directly and is what Phase 1 was built and tested with.
 4. `src-tauri/build.rs` emits `cargo:rustc-link-search=native=lib/windows-x64` and copies `libmpv-2.dll`
    next to the built executable so `tauri dev` runs without PATH changes.
 
-**Bundling:** `tauri.conf.json` → `bundle.resources: { "lib/windows-x64/libmpv-2.dll": "libmpv-2.dll" }` so the DLL
+**GNU toolchain alternative (D15).** Where the MSVC Build Tools cannot be installed (they need
+administrator rights), `rustup toolchain install stable-x86_64-pc-windows-gnu` plus a MinGW-w64 GCC on
+`PATH` (MSYS2 `mingw-w64-x86_64-gcc`, which also provides `windres` for the resource step) builds the same
+tree: `build.rs` picks `libmpv.dll.a` when `target_env = "gnu"`. MSVC remains the documented default.
+
+**Bundling:** `tauri.windows.conf.json` → `bundle.resources: { "lib/windows-x64/libmpv-2.dll": "libmpv-2.dll" }` so the DLL
 installs beside `vihpluh.exe`. Installer target: NSIS (per-user, no admin). A portable `.zip` is produced by CI.
 
 **GPU drivers for hwdec:** any current NVIDIA / AMD / Intel driver exposes D3D11VA for H.264/HEVC/VP9/AV1
@@ -1412,13 +1452,18 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D11 | Settings is an in-window overlay, not a second window | One webview, playback continues, no multi-window transparency issues. |
 | D12 | PiP is a mode of the main window, not a second window | The video surface never has to migrate between windows. |
 | D13 | Linux hwdec chain chosen per GPU vendor | Avoids the NVIDIA VA-API shim; deterministic `hwdec-current`. |
+| D14 | Bind libmpv through `libmpv2-sys` + our own wrapper, not the `libmpv2` safe crate | We need node-format properties, async commands with reply ids, and both render APIs; the safe crate's event/property model would be wrapped again anyway. One small `unsafe` module we fully control. |
+| D15 | Windows builds with either Rust toolchain (MSVC default, GNU supported) | MSVC Build Tools need admin rights; the GNU toolchain does not. `build.rs` selects the matching import library. |
+| D16 | mpv's built-in scripts are switched off individually (`load-stats-overlay`, `load-console`, `load-auto-profiles`, `load-select`, `load-positioning`, `load-commands`, `load-context-menu`, `load-osd-console`) | `load-scripts=no` only covers the user scripts directory; the built-ins were still loading. Switches missing on older mpv are skipped silently. |
+| D17 | Integration tests live in the library's unit-test binary, not `src-tauri/tests/` | A separate test executable lacks the app manifest and dies at load (`STATUS_ENTRYPOINT_NOT_FOUND`) because Tauri's imports need Common Controls v6. |
+| D18 | mpv and the video surface start before Tauri; the surface is bound to the window afterwards (`VideoSurface::bind` replaces `attach`) | WebView2 creation blocks the main thread for ~350 ms. Starting mpv first runs VO creation, file open, decoder and audio-device init in parallel with it: first frame went from ~950–1300 ms to ~620–910 ms after process start on the dev machine. |
 
 ### Open risks (each owned by a Phase 1 spike)
 
 | Risk | Spike | Impact if it fails | Contingency |
 |---|---|---|---|
-| Transparent WebView2 over a sibling child HWND (flicker, z-order, DPI) | S1 | Windows UI overlay unusable | Pass top-level HWND as `wid` (tauri-plugin-libmpv's approach); last resort a layered owned overlay window. |
-| `GtkGLArea` + render API under transparent WebKitGTK on GTK3 (Wayland + X11) | S2 | No Linux video with overlay UI | §5.3 ladder → GTK4/WebKitGTK-6 shell (§4.5) → Qt re-decision. |
-| libmpv import library / DLL bundling with MSVC | S3 | Windows build friction | Runtime loading via `libloading` with hand-kept bindings. |
-| `af-command` live EQ, SW-render thumbnails, `ao=pcm` to pipe, sub option names | S4 | Individual features degrade | Documented per-feature fallbacks in §6.6 / §11. |
+| Transparent WebView2 over a sibling child HWND (flicker, z-order, DPI) | S1 — **passed 2026-11-12** (host must not use `WS_CLIPSIBLINGS`; fullscreen re-check in Phase 3, DPI change in Phase 11) | Windows UI overlay unusable | Pass top-level HWND as `wid` (tauri-plugin-libmpv's approach); last resort a layered owned overlay window. |
+| `GtkGLArea` + render API under transparent WebKitGTK on GTK3 (Wayland + X11) | S2 — **open** (needs bare-metal Fedora; `render_gtk.rs` is a no-video placeholder until then) | No Linux video with overlay UI | §5.3 ladder → GTK4/WebKitGTK-6 shell (§4.5) → Qt re-decision. |
+| libmpv import library / DLL bundling with MSVC | S3 — **passed with the GNU toolchain**; the MSVC `mpv.lib` step is still unexercised (no MSVC on the dev machine) | Windows build friction | Runtime loading via `libloading` with hand-kept bindings. |
+| `af-command` live EQ, SW-render thumbnails, `ao=pcm` to pipe, sub option names | S4 — **passed on Windows 2026-11-12** (probes on branch `spike/s4`); Linux FIFO and render-backend margins/shader ride with S2 | Individual features degrade | Documented per-feature fallbacks in §6.6 / §11. |
 | Windows undecorated transparent window: Snap Layouts, shadow, resize borders | Phase 11 | Polish | `interface.window_decorations = "native"`; custom `WM_NCHITTEST` handling. |

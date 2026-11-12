@@ -61,6 +61,10 @@ pnpm tauri dev           # run
 pnpm tauri build         # installer in src-tauri/target/release/bundle/
 ```
 
+No administrator rights for the Visual Studio Build Tools? The GNU Rust toolchain works too:
+`rustup toolchain install stable-x86_64-pc-windows-gnu` plus a MinGW-w64 GCC on `PATH`
+(for example MSYS2's `mingw-w64-x86_64-gcc`). Details: [ARCHITECTURE §12.1](docs/ARCHITECTURE.md#121-windows-10--11-x64).
+
 ### Fedora
 
 ```bash

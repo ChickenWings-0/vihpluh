@@ -4,7 +4,9 @@ use crate::AppState;
 use crate::error::{AppError, AppResult};
 use crate::ipc::dto::AppInfo;
 
-#[tauri::command]
+/// Runs off the main thread: reading the versions waits for mpv's core, which is still
+/// bringing up the video output during startup.
+#[tauri::command(async)]
 pub fn app_info(state: State<'_, AppState>) -> AppInfo {
     let versions = state.player.versions();
     AppInfo {

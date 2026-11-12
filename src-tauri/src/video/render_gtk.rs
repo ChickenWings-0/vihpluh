@@ -15,7 +15,7 @@ pub struct RenderSurface {
 }
 
 impl RenderSurface {
-    pub fn new(_window: &tauri::WebviewWindow, _config: &Config) -> Result<Self, VideoError> {
+    pub fn new(_config: &Config) -> Result<Self, VideoError> {
         tracing::warn!(
             "the Linux video backend is not implemented yet (pending spike S2): audio only"
         );
@@ -34,7 +34,7 @@ impl VideoSurface for RenderSurface {
         vec![("vo", "null".to_string())]
     }
 
-    fn attach(&self, _mpv: &Mpv) -> Result<(), VideoError> {
+    fn bind(&self, _window: &tauri::WebviewWindow, _mpv: &Mpv) -> Result<(), VideoError> {
         Ok(())
     }
 

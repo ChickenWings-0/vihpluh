@@ -16,6 +16,22 @@ pub fn attach_parent_console() {
     windows::attach_parent_console();
 }
 
+/// Shows a window without activating it and behind every other window. Used only by
+/// development verification runs so they do not take focus from whatever the user is doing.
+/// Returns false where this is not supported.
+#[cfg(debug_assertions)]
+pub fn show_window_unobtrusively(window: &tauri::WebviewWindow) -> bool {
+    #[cfg(windows)]
+    {
+        windows::show_window_unobtrusively(window)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        false
+    }
+}
+
 /// Sets process environment that must be in place before the UI toolkit initialises
 /// (ARCHITECTURE §5.3). Must be called before any other thread exists.
 pub fn prepare_environment(config: &Config) {

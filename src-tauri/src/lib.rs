@@ -101,10 +101,22 @@ pub fn run() -> ExitCode {
     }
 }
 
-fn launch(cli: Cli, paths: Paths, config: Config) -> Result<(), tauri::Error> {
+fn launch(cli: Cli, paths: Paths, config: Config) -> Result<(), Box<dyn std::error::Error>> {
+    // mpv starts first: its video output and the first file come up while Tauri and the
+    // webview (the slow part of startup) are still initialising.
+    let surface = video::create(&config)?;
+    let capabilities = surface.capabilities();
+    let player = Player::start(&config, surface, &cli.mpv_opts)?;
+    if let Some(source) = cli.sources.first() {
+        let start = cli.start.map(cli::StartPosition::to_mpv);
+        player.open(source, start.as_deref(), cli.paused)?;
+    }
+
+    let state = AppState { paths, config, player, capabilities, revealed: AtomicBool::new(false) };
     let app = tauri::Builder::default()
-        .setup(move |app| {
-            setup(app, &cli, paths, config)?;
+        .manage(state)
+        .setup(|app| {
+            setup(app)?;
             Ok(())
         })
         .invoke_handler(invoke_handler())
@@ -139,12 +151,8 @@ fn invoke_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stat
     ]
 }
 
-fn setup(
-    app: &mut tauri::App,
-    cli: &Cli,
-    paths: Paths,
-    config: Config,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let state = app.state::<AppState>();
     let window_config = app
         .config()
         .app
@@ -156,19 +164,9 @@ fn setup(
     // Webview storage lives under our data root so `--home` / portable mode keep everything
     // in one place.
     let window = WebviewWindowBuilder::from_config(app.handle(), &window_config)?
-        .data_directory(paths.data.join("webview"))
+        .data_directory(state.paths.data.join("webview"))
         .build()?;
-
-    let surface = video::create(&window, &config)?;
-    let capabilities = surface.capabilities();
-    let player = Player::start(app.handle().clone(), &config, surface, &cli.mpv_opts)?;
-
-    if let Some(source) = cli.sources.first() {
-        let start = cli.start.map(cli::StartPosition::to_mpv);
-        player.open(source, start.as_deref(), cli.paused)?;
-    }
-
-    app.manage(AppState { paths, config, player, capabilities, revealed: AtomicBool::new(false) });
+    state.player.attach(app.handle().clone(), &window)?;
 
     let handle = app.handle().clone();
     std::thread::spawn(move || {
@@ -186,7 +184,14 @@ pub fn reveal_main_window(app: &AppHandle) {
         return;
     }
     if let Some(window) = app.get_webview_window("main") {
-        tracing::info!("revealing the main window");
+        tracing::debug!("revealing the main window");
+        // Development verification runs must not take focus from the person at the keyboard.
+        #[cfg(debug_assertions)]
+        if std::env::var_os("VIHPLUH_QUIET_TEST").is_some()
+            && platform::show_window_unobtrusively(&window)
+        {
+            return;
+        }
         if let Err(err) = window.show().and_then(|()| window.set_focus()) {
             tracing::warn!("could not show the main window: {err}");
         }
