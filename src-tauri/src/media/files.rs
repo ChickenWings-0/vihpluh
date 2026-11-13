@@ -15,6 +15,12 @@ pub fn is_media_file(path: &Path) -> bool {
     })
 }
 
+pub fn is_playlist_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "m3u" | "m3u8"))
+}
+
 /// Compares names the way people read them: `E2` before `E10`, case-insensitive.
 pub fn natural_cmp(a: &str, b: &str) -> Ordering {
     let (mut a, mut b) = (a.chars().peekable(), b.chars().peekable());
@@ -81,6 +87,17 @@ pub fn expand_sources(sources: &[String]) -> Vec<String> {
         let path = std::path::absolute(source).unwrap_or_else(|_| PathBuf::from(source));
         if path.is_dir() {
             out.extend(list_folder(&path).into_iter().map(|p| p.display().to_string()));
+        } else if is_playlist_file(&path) {
+            // An `.m3u` / `.m3u8` stands for what it lists (ARCHITECTURE §4.6).
+            match std::fs::read(&path) {
+                Ok(bytes) => {
+                    let text = crate::subtitles::cues::decode(&bytes);
+                    let base = path.parent().unwrap_or(Path::new(""));
+                    let items = crate::library::playlists::parse_m3u(&text, base);
+                    out.extend(items.into_iter().map(|item| item.source));
+                }
+                Err(err) => tracing::warn!("a playlist file could not be read: {err}"),
+            }
         } else {
             out.push(path.display().to_string());
         }
@@ -128,6 +145,30 @@ mod tests {
         assert_eq!(expanded.len(), 4);
         assert_eq!(expanded[0], "https://example.com/a.m3u8");
         assert!(expanded[1].ends_with("E1.mkv"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn playlist_files_expand_to_their_entries() {
+        let dir = std::env::temp_dir().join(format!("vihpluh-m3u-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let list = dir.join("mix.M3U8");
+        std::fs::write(
+            &list,
+            "#EXTM3U
+#EXTINF:-1,One
+sub/a.mp3
+https://example.com/live.m3u8
+",
+        )
+        .unwrap();
+        let expanded = expand_sources(&[list.display().to_string()]);
+        assert_eq!(expanded.len(), 2);
+        assert!(expanded[0].replace('\\', "/").ends_with("/sub/a.mp3"), "{expanded:?}");
+        // A remote list is left for mpv to open as a stream.
+        assert_eq!(expanded[1], "https://example.com/live.m3u8");
+        assert_eq!(expand_sources(&["https://example.com/live.m3u8".into()]).len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

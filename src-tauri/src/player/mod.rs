@@ -10,6 +10,7 @@
 mod audio;
 pub mod equalizer;
 mod flow;
+mod gapless;
 pub mod headless;
 pub mod hwdec;
 mod inspector;
@@ -276,6 +277,7 @@ impl Player {
                 cues,
                 presets,
                 preset: presets::PresetState::default(),
+                gapless: gapless::Gapless::default(),
             };
             std::thread::Builder::new()
                 .name("core".into())
@@ -745,6 +747,7 @@ struct Core {
     cues: Arc<crate::subtitles::CueIndex>,
     presets: Arc<crate::presets::PresetStore>,
     preset: presets::PresetState,
+    gapless: gapless::Gapless,
 }
 
 impl Core {
@@ -861,9 +864,17 @@ impl Core {
             Event::AsyncError { id, error } => {
                 tracing::warn!(id, "an mpv command or property write failed: {error}");
             }
-            Event::EndFile { reason, error } => tracing::debug!(?reason, ?error, "end of file"),
+            Event::EndFile { reason, error } => {
+                tracing::debug!(?reason, ?error, "end of file");
+                if *reason == mpv::EndReason::Eof {
+                    self.gapless_file_ended();
+                }
+            }
             Event::FileLoaded => tracing::debug!("file loaded"),
-            Event::StartFile => self.on_start_file(),
+            Event::StartFile => {
+                self.on_start_file();
+                self.gapless_file_started();
+            }
             Event::PlaybackRestart => tracing::debug!("playback restart (first frame shown)"),
             _ => {}
         }
@@ -976,6 +987,7 @@ impl Core {
         if old.playback.presets_enabled != self.config.playback.presets_enabled {
             self.apply_presets();
         }
+        self.sync_gapless();
     }
 
     // ── Output ──────────────────────────────────────────────────────────────

@@ -43,6 +43,8 @@ pub fn fixed(config: &Config, ytdlp_available: bool) -> OptionList {
     // vihpluh keeps the display awake itself, the same way on every platform
     // (platform/power.rs).
     push(&mut o, "stop-screensaver", "no");
+    // The next track of an album is opened ahead of time (player/gapless.rs).
+    push(&mut o, "prefetch-playlist", "yes");
     o
 }
 

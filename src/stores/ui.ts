@@ -19,6 +19,16 @@ export type SidebarTab = (typeof SIDEBAR_TABS)[number];
 const asTab = (tab: string): SidebarTab =>
   (SIDEBAR_TABS as readonly string[]).includes(tab) ? (tab as SidebarTab) : "subtitles";
 
+/** A small modal that asks for one line of text (a URL, a playlist name). */
+export interface TextPrompt {
+  title: string;
+  label: string;
+  placeholder?: string;
+  initial?: string;
+  confirm: string;
+  onSubmit: (text: string) => void | Promise<void>;
+}
+
 /** Maps a drop point to a queue position when the pointer is over the queue panel. */
 export type DropResolver = (x: number, y: number) => number | null;
 
@@ -41,6 +51,9 @@ interface UiStore {
   keyContext: KeyContext;
   dropHint: DropHint;
   dock: DockPanel;
+  /** The Library drawer (left side) is open. */
+  library: boolean;
+  prompt: TextPrompt | null;
   sidebarTab: SidebarTab;
   /** Bumped to scroll the Playback tab to the stream inspector. */
   inspectorRequest: number;
@@ -63,6 +76,8 @@ interface UiStore {
   /** Opens a panel in the dock (or closes it when it is already open). */
   toggleDock: (panel: Exclude<DockPanel, null>) => void;
   setDock: (panel: DockPanel) => void;
+  setLibrary: (open: boolean) => void;
+  ask: (prompt: TextPrompt | null) => void;
   /** Opens the sidebar on `tab`; with `toggle`, closes it when that tab is already showing. */
   showSidebarTab: (tab: SidebarTab, toggle?: boolean) => void;
   requestInspector: () => void;
@@ -93,6 +108,8 @@ export const useUiStore = create<UiStore>((set, get) => ({
   keyContext: "global",
   dropHint: null,
   dock: null,
+  library: false,
+  prompt: null,
   sidebarTab: "subtitles",
   inspectorRequest: 0,
   dockDragWidth: null,
@@ -127,6 +144,12 @@ export const useUiStore = create<UiStore>((set, get) => ({
     set({ dock });
     persistUi({ queueOpen: dock === "queue", sidebarOpen: dock === "sidebar" });
   },
+  setLibrary: (library) => {
+    if (get().library === library) return;
+    set({ library });
+    persistUi({ libraryOpen: library });
+  },
+  ask: (prompt) => set({ prompt }),
   showSidebarTab: (tab, toggle = false) => {
     const s = get();
     if (toggle && s.dock === "sidebar" && s.sidebarTab === tab) {
@@ -148,6 +171,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   hydrate: (ui) =>
     set({
       dock: ui.queueOpen ? "queue" : ui.sidebarOpen ? "sidebar" : null,
+      library: ui.libraryOpen,
       sidebarTab: asTab(ui.sidebarTab),
     }),
 }));

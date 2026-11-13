@@ -43,6 +43,8 @@ pub(super) struct Pending {
     generation: u64,
     item: QueueItem,
     opts: LoadOpts,
+    /// mpv is already opening this file by itself (gapless): everything but `loadfile`.
+    adopt: bool,
 }
 
 /// The result of the off-thread part of a load.
@@ -199,16 +201,40 @@ impl Core {
     /// `on_prepared` issues the actual `loadfile`.
     pub(super) fn load(&mut self, item: QueueItem, opts: LoadOpts) {
         self.save_progress();
-        self.generation += 1;
-        self.current = None;
-        self.presets_begin_load(opts.preset.clone());
+        // A `loadfile replace` follows: whatever was appended for gapless playback goes.
+        self.gapless_reset();
         if !item.is_url && !Path::new(&item.source).is_file() {
+            self.generation += 1;
+            self.current = None;
+            self.presets_begin_load(opts.preset.clone());
             let effects = self.mirror.fail("file not found");
             self.apply_failure(effects);
             return;
         }
         let effects = self.mirror.begin_loading();
         self.apply(effects);
+        self.prepare(item, opts, false);
+    }
+
+    /// Takes over a file mpv moved to by itself (the next track of an album).
+    pub(super) fn adopt(&mut self, item: QueueItem) {
+        self.prepare(item, LoadOpts::default(), true);
+    }
+
+    /// The file that just played to its end is marked finished.
+    pub(super) fn finish_current(&mut self) {
+        if let (Some(db), Some(key)) =
+            (self.history_db(), self.current.as_ref().and_then(|c| c.media_key.clone()))
+        {
+            db.spawn("mark finished", move |c| history::mark_finished(c, &key));
+        }
+    }
+
+    /// The off-thread half of a load: identity, history, linked subtitles, stream headers.
+    fn prepare(&mut self, item: QueueItem, opts: LoadOpts, adopt: bool) {
+        self.generation += 1;
+        self.current = None;
+        self.presets_begin_load(opts.preset.clone());
 
         let generation = self.generation;
         let source = item.source.clone();
@@ -216,7 +242,7 @@ impl Core {
         let db = if self.history_enabled() { self.db.clone() } else { None };
         let links_db = self.db.clone();
         let tx = self.tx.clone();
-        self.pending = Some(Pending { generation, item, opts });
+        self.pending = Some(Pending { generation, item, opts, adopt });
         let spawned = std::thread::Builder::new().name("prepare".into()).spawn(move || {
             let media_key = match crate::media::identity::media_key(&source) {
                 Ok(key) => Some(key),
@@ -273,13 +299,13 @@ impl Core {
         let Some(pending) = self.pending.take_if(|p| p.generation == prepared.generation) else {
             return;
         };
-        let Pending { item, opts, .. } = pending;
+        let Pending { item, opts, adopt, .. } = pending;
         let playback = &self.config.playback;
         let mut paused = opts.paused.unwrap_or(!playback.autoplay);
         let mut start = opts.start.clone();
         let mut resumed_at = None;
         let mut offer_resume = None;
-        if start.is_none() && !opts.no_resume && playback.resume != ResumeMode::Never {
+        if !adopt && start.is_none() && !opts.no_resume && playback.resume != ResumeMode::Never {
             let point = prepared
                 .history
                 .as_ref()
@@ -297,9 +323,11 @@ impl Core {
             }
         }
 
-        self.set_property("pause", Value::Flag(paused));
         let effects = self.mirror.expect_media(&item.source, prepared.media_key.clone());
         self.apply(effects);
+        if !adopt {
+            self.set_property("pause", Value::Flag(paused));
+        }
         let mut options: Vec<(&str, String)> = Vec::new();
         if let Some(start) = &start {
             options.push(("start", start.clone()));
@@ -312,7 +340,9 @@ impl Core {
                 options.push(("referrer", referrer.clone()));
             }
         }
-        if options.is_empty() {
+        if adopt {
+            // mpv is already playing it.
+        } else if options.is_empty() {
             self.run_command(&["loadfile", &item.source, "replace"]);
         } else {
             // loadfile <url> <flags> <index> <options>
@@ -335,6 +365,10 @@ impl Core {
             offer_resume,
         });
         self.last_position_save = Instant::now();
+        // An adopted file may have finished opening while its history was looked up.
+        if adopt && !self.mirror.inputs().loading {
+            self.on_file_loaded();
+        }
     }
 
     /// The file is open: update the queue item, restore per-file memory, say where we resumed.
@@ -366,6 +400,7 @@ impl Core {
             });
             self.emit(events::OSD_SHOW, &osd);
         }
+        self.sync_gapless();
         if let Some(at) = current.offer_resume {
             let mut osd =
                 OsdEvent::new(OsdKind::Info, format!("You stopped at {}", format_clock(at)));
@@ -431,11 +466,7 @@ impl Core {
 
     /// The file played to its end.
     pub(super) fn on_ended(&mut self) {
-        if let (Some(db), Some(key)) =
-            (self.history_db(), self.current.as_ref().and_then(|c| c.media_key.clone()))
-        {
-            db.spawn("mark finished", move |c| history::mark_finished(c, &key));
-        }
+        self.finish_current();
         let decision = match self.sleep_at_end_of_file() {
             Some(decision) => decision,
             None => self.queue.on_ended(self.config.playback.at_queue_end),
@@ -447,6 +478,7 @@ impl Core {
         self.save_progress();
         self.pending = None;
         self.current = None;
+        self.gapless_reset();
         self.run_command(&["stop"]);
         let effects = self.mirror.clear_error();
         self.apply(effects);
@@ -531,6 +563,8 @@ impl Core {
             }
             self.emit(events::QUEUE_CHANGED, &state);
             self.session_due.get_or_insert(now + SESSION_DEBOUNCE);
+            // What comes next may have changed.
+            self.sync_gapless();
         }
         if self.session_due.is_some_and(|due| now >= due) {
             self.session_due = None;

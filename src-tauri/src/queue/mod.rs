@@ -466,6 +466,15 @@ impl Queue {
         }
     }
 
+    /// What `on_ended` would move to, without moving: the item that follows the current
+    /// one when it plays out (`None` when playback stops, repeats, or the queue ends).
+    pub fn peek_after_end(&self) -> Option<QueueItem> {
+        if self.current.is_none() || self.stop_after_current || self.repeat == Repeat::One {
+            return None;
+        }
+        self.neighbour(1, self.repeat == Repeat::All)
+    }
+
     /// The current item played to its end.
     pub fn on_ended(&mut self, at_queue_end: AtQueueEnd) -> Decision {
         if self.current.is_none() {
@@ -664,6 +673,30 @@ mod tests {
         assert!(state.can_next);
         assert!(state.items.iter().all(|i| i.origin == Origin::User && !i.is_url));
         assert_eq!(state.items[0].title, "a");
+    }
+
+    #[test]
+    fn peeking_at_what_follows_agrees_with_what_follows_and_changes_nothing() {
+        let (mut q, _) = queue_of(&["a", "b", "c"]);
+        let rev = q.state().rev;
+        assert_eq!(q.peek_after_end().map(|i| i.source), Some("b".to_string()));
+        assert_eq!(q.state().rev, rev, "peeking is not a change");
+        assert_eq!(current(&q), "a");
+        assert_eq!(loaded(&q.on_ended(AtQueueEnd::Hold)), "b");
+
+        q.set_repeat(Repeat::One);
+        assert_eq!(q.peek_after_end(), None, "repeat-one restarts instead");
+        q.set_repeat(Repeat::Off);
+        q.set_stop_after_current(true);
+        assert_eq!(q.peek_after_end(), None, "stop after current");
+        q.set_stop_after_current(false);
+
+        q.on_ended(AtQueueEnd::Hold);
+        assert_eq!(current(&q), "c");
+        assert_eq!(q.peek_after_end(), None, "the end of the queue");
+        q.set_repeat(Repeat::All);
+        assert_eq!(q.peek_after_end().map(|i| i.source), Some("a".to_string()), "wraps");
+        assert_eq!(Queue::new(1).peek_after_end(), None);
     }
 
     #[test]

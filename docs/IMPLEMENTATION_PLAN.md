@@ -110,7 +110,7 @@ branches; the scaffold tasks are production-quality on `main`.
 - [ ] `render_gtk.rs` (from S2) implemented cleanly. *(A no-video placeholder until S2 runs on **L**.)*
 - [x] `player/mpv.rs` wrapper; primary handle created with A§6.2 options; mpv log forwarding.
 - [x] `player/hwdec.rs` chain selection (A§5.4) with unit tests for every row of the table.
-- [x] `cli.rs` (A§4.6): positional file plays on launch; `--version` prints app/mpv/ffmpeg/backend. *(Folder and `.m3u` expansion arrive with the queue in Phase 4 and the IPTV parser in Phase 9.)*
+- [x] `cli.rs` (A§4.6): positional file plays on launch; `--version` prints app/mpv/ffmpeg/backend. *(Folder expansion came with the queue in Phase 4, `.m3u` expansion in Phase 9.)*
 - [x] Window shows only after frontend `app_ready`; clean shutdown (A§4.4) with watchdog.
 - [x] Temporary debug overlay (dev builds only): `hwdec-current`, backend, session, dropped frames.
 
@@ -459,35 +459,45 @@ was last left with, and shows "modified" when those differ from the preset.
 
 ---
 
-## 11. Phase 9 — Library, playlists, streams — ☐ not started
+## 11. Phase 9 — Library, playlists, streams — ☑ closed (Windows, 2026-11-14) — Linux pending; three checks pending (see notes)
 
 **Goal:** the Library drawer — browse and enqueue anything without touching what's playing.
 
-- [ ] Remaining DB tables in use; `library/scan.rs` (walk, upsert, removal, `notify` watching, ignore patterns, lazy `media_key` + duration fill); `library://scan` progress.
-- [ ] Video metadata from filename (series parser); music tags via `lofty` (`library/music.rs`); FTS index maintenance.
-- [ ] `library_*` commands with paging; live folder browser for pinned folders.
-- [ ] **Library drawer** (D§11.1): slide-in, section switcher (duotone icons, D§5.2), search, virtualised lists; Videos (All/Series/Folders), Music (Albums/Artists/Tracks), Recent, Folders (pin/unpin, breadcrumb), Playlists.
-- [ ] Item interactions: play now / play next / enqueue (keys + row buttons + context menu); watched check and progress line; drawer stays open while enqueueing.
-- [ ] `library/playlists.rs`: JSON files (A§9.5), relocation by `media_key`, M3U8 import/export; playlist view with reorder/rename/delete; "Save queue as playlist", "Add to playlist".
-- [ ] `library/iptv.rs`: M3U parser (fixtures: attributes, `#EXTVLCOPT`, groups, bad lines), stream sources CRUD + refresh, Streams section (sources → groups → channels, search), per-stream headers at load; Open URL dialog.
-- [ ] Network settings applied (`network.*` keys, K§5.9); yt-dlp detection.
-- [ ] Music niceties: album queueing in disc/track order; gapless via two-entry mpv playlist window (A§8.1 note) behind `audio.gapless`.
-- [ ] Library context shortcuts; `ui.toggle_library`; top-bar title button wiring.
+- [x] Remaining DB tables in use; `library/scan.rs` (walk, upsert, removal, `notify` watching, ignore patterns, lazy `media_key` + duration fill); `library://scan` progress. *(Watching and the lazy fill live in `library/mod.rs`; migration `0002` adds the FTS triggers.)*
+- [x] Video metadata from filename (series parser); music tags via `lofty` (`library/music.rs`); FTS index maintenance.
+- [x] `library_*` commands with paging; live folder browser for pinned folders.
+- [x] **Library drawer** (D§11.1): slide-in, section switcher (duotone icons, D§5.2), search, virtualised lists; Videos (All/Series/Folders), Music (Albums/Artists/Tracks), Recent, Folders (pin/unpin, breadcrumb), Playlists. *(A series opens straight to its episodes, with the season in each row; albums are rows, not a grid of cards.)*
+- [x] Item interactions: play now / play next / enqueue (keys + row buttons + context menu); watched check and progress line; drawer stays open while enqueueing.
+- [x] `library/playlists.rs`: JSON files (A§9.5), relocation by `media_key`, M3U8 import/export; playlist view with reorder/rename/delete; "Save queue as playlist", "Add to playlist". *(Reorder is by row buttons and the row menu, not drag. Export asks for the file's path in a text prompt; there is no save dialog.)*
+- [x] `library/iptv.rs`: M3U parser (fixtures: attributes, `#EXTVLCOPT`, groups, bad lines), stream sources CRUD + refresh, Streams section (sources → groups → channels, search), per-stream headers at load; Open URL dialog.
+- [x] Network settings applied (`network.*` keys, K§5.9); yt-dlp detection. *(Both were in place since Phase 2; stream-list downloads now follow the user agent, proxy, and timeout too.)*
+- [x] Music niceties: album queueing in disc/track order; gapless via two-entry mpv playlist window (A§8.1 note) behind `audio.gapless`. *(`player/gapless.rs`.)*
+- [x] Library context shortcuts; `ui.toggle_library`; top-bar title button wiring.
 
 ### Verification
 
-- [ ] Adding a folder of ≥ 2 000 files indexes at the A§14 rate with playback of T4 running and no dropped frames; UI stays responsive.
-- [ ] T6 appears as one series with correct episode order; movies appear ungrouped; T9 appears under the right album/artist with track order.
-- [ ] Adding, renaming, and deleting a file on disk is reflected without a manual rescan.
-- [ ] While T1 plays: browse, search, enqueue three items, start a playlist with "play next" — playback never hiccups; the drawer closes only when asked.
-- [ ] Search finds by title, series, artist, album; `Ctrl+F` focuses it; results update as you type without jank at 10 000 rows.
-- [ ] Playlist round-trip: save queue → restart → open playlist → identical order; export M3U8 → import → identical; move a file on disk → playlist relocates it via `media_key`.
-- [ ] T11: the `.m3u` imports with groups; a channel plays; `#EXTVLCOPT` user agent is sent (verify with a local test server); refresh replaces entries.
-- [ ] With artwork loading off, a packet capture during library use shows **zero** outbound connections.
-- [ ] T9 album plays gaplessly (no audible gap/click between tracks of a continuous album).
-- [ ] Pinned folder browser works for a folder that is not indexed; pin/unpin persists.
+- [x] Adding a folder of ≥ 2 000 files indexes at the A§14 rate with playback of T4 running and no dropped frames; UI stays responsive. *(10 000 files indexed in under a second (about 10 000 files/s end to end; 37 000/s in the unit test) while T4 played: 0 dropped frames, and no animation frame in the webview was late (longest gap 7.5 ms).)*
+- [x] T6 appears as one series with correct episode order; movies appear ungrouped; T9 appears under the right album/artist with track order. *("show · 10 episodes" opening to S01E01…E10 in order; "Waltz for Debby · Bill Evans · 1961 · 8 tracks" in track order; two untagged MP3s under "Unknown album", named after their files. Films as single rows are covered by the index unit tests — the test folders hold no film.)*
+- [x] Adding, renaming, and deleting a file on disk is reflected without a manual rescan. *(Each showed in a search within the 4 s the check waited; the watcher settles for 2 s first.)*
+- [x] While T1 plays: browse, search, enqueue three items, start a playlist with "play next" — playback never hiccups; the drawer closes only when asked. *(Three episodes enqueued with Ctrl+Enter and one inserted with Shift+Enter while T1 played on: status `playing` throughout, 0 dropped frames, drawer still open. It closed on Escape and on a click outside, neither of which paused. Play-next was done with an episode, not a playlist.)*
+- [x] Search finds by title, series, artist, album; `Ctrl+F` focuses it; results update as you type without jank at 10 000 rows. *(At 10 010 rows a search answered in 4–8 ms, the unfiltered first page in 6 ms, the series view in 20 ms. Title and series matches seen in the drawer; artist and album matches in the index unit tests.)*
+- [x] Playlist round-trip: save queue → restart → open playlist → identical order; export M3U8 → import → identical; move a file on disk → playlist relocates it via `media_key`. *(A four-item queue (two files, a copy, a URL) saved, was there after a restart in the same order, and exported and re-imported with identical sources and titles. After the copy was renamed away, the playlist pointed at another file with the same media key — the original it was copied from, which is as far as identical content can tell them apart.)*
+- [x] T11: the `.m3u` imports with groups; a channel plays; `#EXTVLCOPT` user agent is sent (verify with a local test server); refresh replaces entries. *(Against a local server rather than a public stream: four channels in News / Sport / ungrouped; the channel played; the server logged `VihpluhTest/9.9 (per-channel, agent)` and the referrer for that channel and the default agent for the next one; after the list changed, refresh showed the renamed and the added channel. A local-file list and a failing address behaved too.)*
+- [ ] With artwork loading off, a packet capture during library use shows **zero** outbound connections. *(No capture: it needs administrator rights. Instead, the process's sockets were listed during library use — only loopback ones, to the test server. Channel logos are never requested at all in this version. The system WebView's own processes were not inspected.)*
+- [ ] T9 album plays gaplessly (no audible gap/click between tracks of a continuous album). *(Mechanism ✓: with the album queued, mpv held `[current, next]`, moved to track 2 by itself — the status never left `playing` — and the queue, identity, and history followed; the next track was appended again. The by-ear half needs a person: runs are muted.)*
+- [x] Pinned folder browser works for a folder that is not indexed; pin/unpin persists. *(A pinned, unindexed folder listed its subfolders and ten files live and opened a subfolder; the pin was there after a restart.)*
 
 **Platforms:** W + L-Wayland.
+
+**Phase 9 notes (2026-11-14, Windows only).** Driven through the webview's DevTools channel in
+the quiet, muted test build, with a local HTTP server standing in for T11. Still open: listening
+for the gapless join, a real packet capture, and the native dialogs behind "Add folder…",
+"Add M3U… from a file", and "Import M3U…" (the commands behind them were exercised directly).
+Found and fixed: the glob matcher let `**/` match inside a name, so the shipped `**/.*` ignore
+pattern skipped every file with an extension; video durations were never filled in, because the
+probe disabled every track and mpv then refuses to load; a reused probe handle read the previous
+file's end as the next file's failure; after opening a row with Enter nothing was selected.
+Noticed, not changed: a channel's title in the queue is its address, not the name its list gives.
 
 ---
 
@@ -600,8 +610,8 @@ Fill in as phases close (✓ works · ◐ works with documented limitation · �
 | Waveform | | | |
 | Subtitle timeline + auto-match | ✓ | | |
 | Presets | ✓ | | |
-| Library + watch folders | | | |
-| IPTV / network streams | | | |
+| Library + watch folders | ✓ | | |
+| IPTV / network streams | ✓ | | |
 | Settings + hotkey editor | | | |
 | Installer / package | | | |
 

@@ -158,12 +158,13 @@ pub struct DurationProbe {
 impl DurationProbe {
     pub fn new() -> MpvResult<Self> {
         let mpv = handle(&[
+            // Tracks stay selectable: with none, mpv refuses to load the file at all. Paused
+            // with null outputs, nothing is shown or heard and next to nothing is decoded.
             ("vo", "null"),
             ("ao", "null"),
-            ("vid", "no"),
-            ("aid", "no"),
             ("sid", "no"),
             ("pause", "yes"),
+            ("hwdec", "no"),
             ("cache", "no"),
             ("demuxer-readahead-secs", "0"),
             ("idle", "yes"),
@@ -174,9 +175,21 @@ impl DurationProbe {
     /// The file's duration in seconds, or `None` when it cannot be opened or does not say.
     pub fn duration(&self, source: &str) -> Option<f64> {
         self.mpv.command(&["loadfile", source]).ok()?;
-        let loaded = wait_loaded(&self.mpv, Duration::from_secs(5));
-        let duration = loaded.ok().and_then(|()| self.mpv.get_f64("duration"));
-        let _ = self.mpv.command(&["stop"]);
+        // The file before this one ends (reason: stop) as this one replaces it; only an
+        // error ending is about the file being opened now.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut loaded = false;
+        while Instant::now() < deadline {
+            match self.mpv.wait_event(0.05) {
+                Event::FileLoaded => {
+                    loaded = true;
+                    break;
+                }
+                Event::EndFile { reason: EndReason::Error, .. } | Event::Shutdown => break,
+                _ => {}
+            }
+        }
+        let duration = if loaded { self.mpv.get_f64("duration") } else { None };
         duration.filter(|d| d.is_finite() && *d > 0.0)
     }
 }
@@ -235,6 +248,20 @@ mod tests {
         let missing = dir.join("nope.m3u").display().to_string();
         assert!(fetch_url(&missing, &dest, &[], Duration::from_secs(10)).is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The embedded subtitle fixture is a real (audio-only) Matroska file of eight seconds.
+    #[test]
+    fn a_real_file_reports_its_duration() {
+        let path =
+            std::env::temp_dir().join(format!("vihpluh-probe-ok-{}.mkv", std::process::id()));
+        std::fs::write(&path, include_bytes!("../subtitles/fixtures/two-subs.mkv")).unwrap();
+        let probe = DurationProbe::new().unwrap();
+        let duration = probe.duration(&path.display().to_string()).unwrap();
+        assert!((7.5..8.5).contains(&duration), "{duration}");
+        // The handle is reused for the next file.
+        assert!(probe.duration(&path.display().to_string()).is_some());
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

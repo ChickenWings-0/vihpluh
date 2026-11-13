@@ -774,20 +774,22 @@ interface AppInfo {
 | Command | Request | Returns |
 |---|---|---|
 | `library_folders` | — | `LibraryFolder[]` |
-| `library_add_folder` | `{ path: string, kind: "video" \| "music" \| "mixed", pinned: boolean }` | `void` |
+| `library_add_folder` | `{ path: string, kind: "video" \| "music" \| "mixed", pinned: boolean, indexed?: boolean }` | `number` (folder id). `indexed` defaults to `!pinned`: a pinned-only folder is a shortcut that is browsed live. Adding a folder that exists updates it; `indexed` never turns off this way. |
 | `library_remove_folder` | `{ id: number }` | `void` |
 | `library_rescan` | `{ folderId?: number }` | `void` |
-| `library_browse` | `{ path: string }` | `{ dirs: DirEntry[], files: MediaEntry[] }` |
+| `library_browse` | `{ path: string }` | `{ path, parent: string \| null, dirs: DirEntry[], files: MediaEntry[] }` — the folder as it is on disk now |
 | `library_query` | `{ kind: "video" \| "music", view: "all" \| "series" \| "albums" \| "artists", parent?: string, search?: string, limit: number, offset: number }` | `Page<MediaEntry \| GroupEntry>` |
 | `library_recent` | `{ limit: number }` | `RecentEntry[]` |
 | `library_clear_history` | `{ mediaKey?: string }` | `void` |
 | `playlist_list` / `playlist_get` | — / `{ id }` | `PlaylistSummary[]` / `Playlist` |
-| `playlist_save` / `playlist_delete` | `Playlist` / `{ id }` | `void` |
+| `playlist_save` / `playlist_delete` | `Playlist` / `{ id }` | `string` (id; an empty `id` makes a new playlist) / `void` |
+| `playlist_add_items` | `{ id: string, sources: string[] }` | `void` |
 | `playlist_import_m3u` / `playlist_export_m3u` | `{ path }` / `{ id, path }` | `string` (id) / `void` |
 | `streams_sources` | — | `StreamSource[]` |
 | `streams_add_source` | `{ name: string, location: string /* URL or file */ }` | `number` |
 | `streams_refresh` / `streams_remove_source` | `{ id: number }` | `void` |
-| `streams_list` | `{ sourceId?: number, group?: string, search?: string, limit, offset }` | `Page<StreamEntry>` |
+| `streams_list` | `{ sourceId?: number, group?: string, search?: string, limit, offset }` | `Page<StreamEntry>` (`group: ""` = channels without a group) |
+| `streams_groups` | `{ sourceId: number }` | `{ name: string \| null, count: number }[]` |
 
 **config / window / media / app**
 
@@ -875,15 +877,21 @@ Three distinct things. Browsing or editing any of them never interrupts playback
 - **Previous:** if position > 5 s, restart the current item; otherwise go to the previous item.
 - **Stop after current:** one-shot flag, cleared when it fires.
 - Queue items pointing to missing files are kept, marked `error`, and skipped.
-- mpv's own playlist holds only the current file. *(Phase 9 enhancement for gapless albums: keep a two-entry
-  window `[current, next]` with `prefetch-playlist=yes` and `gapless-audio=weak`, re-synced on every queue mutation.)*
+- mpv's own playlist holds only the current file — except for music after music (`player/gapless.rs`): then the
+  next queue item is appended, so mpv's playlist is `[current, next]` with `prefetch-playlist=yes` and
+  `gapless-audio` from `audio.gapless`, put right after every queue change. When mpv moves on by itself the core
+  follows: the queue advances and the file gets its identity, history, and presets as on any load; only the
+  `loadfile` is skipped. Nothing is appended for video, URLs, repeat-one, stop-after-current, or a sleep timer
+  that ends with the file (D38).
 
 ### 8.2 Library
 
 - **Folders:** user-added roots (`kind`: video / music / mixed) plus **pinned folders** (shown as shortcuts; browsed live from disk, not necessarily indexed).
 - **Scanner:** walks roots off-thread, upserts `media` rows keyed by path, detects changes by `(size, mtime)`,
-  removes rows for vanished files, then watches with `notify`. Metadata comes from filename parsing (§10.2) for
-  video and `lofty` tags for audio. Durations are filled lazily (headless probe via the thumbnail mpv handle) — never block a scan on them.
+  removes rows for vanished files, then watches with `notify` (a change settles for 2 s, then the folder is
+  scanned again). Metadata comes from filename parsing (§10.2) for video and `lofty` tags for audio. Media keys
+  and video durations are filled in lazily after a scan, a few files at a time between scan jobs (durations by
+  a headless open, `player/headless.rs`) — never block a scan on them.
 - **Views:** Videos (All · Series grouped by `series_key` · Folders), Music (Albums · Artists · Tracks),
   Streams (sources → groups → channels), Recent (from `history`), Pinned Folders (live browser), Playlists.
 - **Search:** SQLite FTS5 over title/series/artist/album; `Ctrl+F` inside the drawer.
@@ -894,7 +902,9 @@ Three distinct things. Browsing or editing any of them never interrupts playback
 - `.m3u/.m3u8` parser (`library/iptv.rs`): `#EXTM3U`, `#EXTINF:-1 tvg-id="" tvg-name="" tvg-logo="" group-title="",Name`,
   `#EXTVLCOPT:http-user-agent=…` / `http-referrer=…` (mapped to per-file `user-agent` / `referrer`), `#EXTGRP`.
 - A **stream source** is a URL or local file; `streams_refresh` re-downloads and replaces its entries. No background refresh.
-- Channel logos are remote images: loaded only if `network.load_remote_artwork = true` (default false).
+  A URL is fetched through mpv's own network stack — `stream-dump` on a headless handle (`player/headless.rs`) —
+  so there is no HTTP client in the binary and lists follow `network.user_agent`, `proxy`, and `timeout_s` (D37).
+- Channel logos are remote images: loaded only if `network.load_remote_artwork = true` (default false). *(Not shown at all yet: the drawer lists channels as text.)*
 - "Open URL" (`Ctrl+N`) plays any URL mpv/FFmpeg understands; with `yt-dlp` on PATH and `network.use_ytdlp = true`, page URLs too.
 
 ---
@@ -1517,6 +1527,8 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D34 | "Subtitles off" is remembered per file only when the file had a subtitle track to turn off | Otherwise every file once played without subtitles kept a subtitle linked to it later (auto-match, added by hand) from showing. |
 | D35 | Presets are handled as flat maps from dotted key to value; applying a new file's presets first puts back the defaults for keys only the previous file's presets set | One mechanism covers layering, the "modified" comparison, Update, and Capture for every setting; and without the reset a preset's contrast or delay would leak into the next, unrelated file, because mpv keeps property values across files. |
 | D36 | Preset files are read through a struct with the four sections as plain fields, not `serde(flatten)` | Through a flattened struct the TOML parser loses the position of an error, and the toast must name the line. |
+| D37 | Stream lists are downloaded with mpv (`stream-dump` on a headless handle), not an HTTP client crate | One network stack for everything: proxy, user agent, TLS, and timeouts behave exactly as for playback, and the binary gains no dependency. |
+| D38 | Gapless playback appends only the next item to mpv's playlist and lets the core adopt the file mpv moves to | The queue stays the single authority (D4): mpv never holds more than one item it was not told to load, and every queue edit can correct it. A gap-free join needs mpv to open the next file itself. |
 
 ### Open risks (each owned by a Phase 1 spike)
 

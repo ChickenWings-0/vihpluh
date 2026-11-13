@@ -80,6 +80,10 @@ export const windowActions: Action[] = [
         state.closeContextMenu();
         return undefined;
       }
+      if (state.prompt) {
+        state.ask(null);
+        return undefined;
+      }
       const active = document.activeElement;
       if (
         active instanceof HTMLElement &&
@@ -88,6 +92,10 @@ export const windowActions: Action[] = [
       ) {
         active.blur();
         focusPlayerRoot();
+        return undefined;
+      }
+      if (state.library) {
+        state.setLibrary(false);
         return undefined;
       }
       if (state.zen) {

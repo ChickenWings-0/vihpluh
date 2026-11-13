@@ -5,7 +5,7 @@
  */
 import { ChevronRight, Copy, Menu as MenuIcon, Minus, Square, X } from "lucide-react";
 import { type PointerEvent, useState } from "react";
-import { dispatch, isEnabled } from "@/actions";
+import { dispatch } from "@/actions";
 import { focusPlayerRoot } from "@/actions/definitions/window";
 import { IconButton } from "@/components/IconButton";
 import { DropdownMenu, MenuContent } from "@/components/Menu";
@@ -31,13 +31,8 @@ function TitleButton() {
   const isUrl = usePlayer((s) => s.media?.isUrl ?? false);
   const shortcut = useShortcut("ui.toggle_library");
   const secondary = source && !isUrl ? folderOf(source) : null;
-  const enabled = isEnabled("ui.toggle_library");
   return (
-    <Tooltip
-      label={enabled ? "Library" : "Library — coming in Phase 9"}
-      shortcut={shortcut}
-      side="bottom"
-    >
+    <Tooltip label="Library" shortcut={shortcut} side="bottom">
       <button
         type="button"
         onClick={(e) => {

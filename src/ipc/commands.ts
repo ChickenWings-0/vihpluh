@@ -8,11 +8,18 @@ import type { CueWindow } from "./bindings/CueWindow";
 import type { Direction } from "./bindings/Direction";
 import type { EqPreset } from "./bindings/EqPreset";
 import type { EqState } from "./bindings/EqState";
+import type { FolderKind } from "./bindings/FolderKind";
+import type { FolderListing } from "./bindings/FolderListing";
+import type { LibraryFolder } from "./bindings/LibraryFolder";
+import type { LibraryPage } from "./bindings/LibraryPage";
+import type { LibraryQuery } from "./bindings/LibraryQuery";
 import type { Margins } from "./bindings/Margins";
 import type { MatchScope } from "./bindings/MatchScope";
 import type { OpenRequest } from "./bindings/OpenRequest";
 import type { PickKind } from "./bindings/PickKind";
 import type { PlayerState } from "./bindings/PlayerState";
+import type { Playlist } from "./bindings/Playlist";
+import type { PlaylistSummary } from "./bindings/PlaylistSummary";
 import type { Preset } from "./bindings/Preset";
 import type { PresetHit } from "./bindings/PresetHit";
 import type { PresetMatch } from "./bindings/PresetMatch";
@@ -24,6 +31,9 @@ import type { ResolvedKeymap } from "./bindings/ResolvedKeymap";
 import type { SeekRequest } from "./bindings/SeekRequest";
 import type { ShaderEntry } from "./bindings/ShaderEntry";
 import type { SleepRequest } from "./bindings/SleepRequest";
+import type { StreamGroup } from "./bindings/StreamGroup";
+import type { StreamPage } from "./bindings/StreamPage";
+import type { StreamSource } from "./bindings/StreamSource";
 import type { SubMatchReport } from "./bindings/SubMatchReport";
 import type { SubStylePatch } from "./bindings/SubStylePatch";
 import type { TrackSlot } from "./bindings/TrackSlot";
@@ -143,6 +153,63 @@ export const queueSetStopAfterCurrent = (enabled: boolean) =>
 
 // ── library / session ────────────────────────────────────────────────────────
 export const libraryRecent = (limit: number) => invoke<RecentEntry[]>("library_recent", { limit });
+export const libraryClearHistory = (mediaKey?: string) =>
+  invoke<void>("library_clear_history", { mediaKey: mediaKey ?? null });
+export const libraryFolders = () => invoke<LibraryFolder[]>("library_folders");
+/** `pinned` without `indexed` makes a shortcut that is only browsed live. */
+export const libraryAddFolder = (
+  path: string,
+  kind: FolderKind,
+  pinned: boolean,
+  indexed?: boolean,
+) => invoke<number>("library_add_folder", { path, kind, pinned, indexed: indexed ?? null });
+export const libraryRemoveFolder = (id: number) => invoke<void>("library_remove_folder", { id });
+export const libraryRescan = (folderId?: number) =>
+  invoke<void>("library_rescan", { folderId: folderId ?? null });
+export const libraryQuery = (query: LibraryQuery) =>
+  invoke<LibraryPage>("library_query", { query });
+/** A folder as it is on disk now (works for folders outside the library). */
+export const libraryBrowse = (path: string) => invoke<FolderListing>("library_browse", { path });
+
+// ── playlists ────────────────────────────────────────────────────────────────
+export const playlistList = () => invoke<PlaylistSummary[]>("playlist_list");
+export const playlistGet = (id: string) => invoke<Playlist>("playlist_get", { id });
+/** An empty `id` makes a new playlist; resolves to the id. */
+export const playlistSave = (playlist: Playlist) => invoke<string>("playlist_save", { playlist });
+export const playlistDelete = (id: string) => invoke<void>("playlist_delete", { id });
+export const playlistAddItems = (id: string, sources: string[]) =>
+  invoke<void>("playlist_add_items", { id, sources });
+export const playlistImportM3u = (path: string) => invoke<string>("playlist_import_m3u", { path });
+export const playlistExportM3u = (id: string, path: string) =>
+  invoke<void>("playlist_export_m3u", { id, path });
+export const queueSaveAsPlaylist = (name: string) =>
+  invoke<string>("queue_save_as_playlist", { name });
+
+// ── streams ──────────────────────────────────────────────────────────────────
+export const streamsSources = () => invoke<StreamSource[]>("streams_sources");
+/** Adds a stream list (URL or file) and loads its channels; resolves to its id. */
+export const streamsAddSource = (name: string, location: string) =>
+  invoke<number>("streams_add_source", { name, location });
+export const streamsRefresh = (id: number) => invoke<void>("streams_refresh", { id });
+export const streamsRemoveSource = (id: number) => invoke<void>("streams_remove_source", { id });
+export const streamsGroups = (sourceId: number) =>
+  invoke<StreamGroup[]>("streams_groups", { sourceId });
+/** `group: ""` lists the channels without a group. */
+export const streamsList = (req: {
+  sourceId?: number;
+  group?: string;
+  search?: string;
+  limit: number;
+  offset: number;
+}) =>
+  invoke<StreamPage>("streams_list", {
+    sourceId: req.sourceId ?? null,
+    group: req.group ?? null,
+    search: req.search ?? null,
+    limit: req.limit,
+    offset: req.offset,
+  });
+
 export const sessionUiGet = () => invoke<UiState>("session_ui_get");
 export const sessionUiSet = (patch: UiPatch) => invoke<void>("session_ui_set", { patch });
 

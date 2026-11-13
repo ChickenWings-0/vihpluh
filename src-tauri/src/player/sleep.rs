@@ -119,6 +119,8 @@ impl Core {
         }
         self.sleep = Sleep::new(request.kind, request.minutes, Instant::now());
         self.refresh_sleep();
+        // "End of file" must not run into the next track.
+        self.sync_gapless();
     }
 
     fn refresh_sleep(&mut self) {
@@ -173,6 +175,15 @@ impl Core {
 
     /// The current file ended. Returns the decision that replaces the queue's when the
     /// timer ends here; `None` lets the queue decide.
+    /// Whether the sleep timer wants playback to stop when this file ends.
+    pub(super) fn sleep_stops_at_end_of_file(&self) -> bool {
+        match self.sleep.as_ref().map(|s| &s.mode) {
+            Some(Mode::EndOfFile) => true,
+            Some(Mode::EndOfQueue) => !self.queue.state().can_next,
+            _ => false,
+        }
+    }
+
     pub(super) fn sleep_at_end_of_file(&mut self) -> Option<Decision> {
         let mode = self.sleep.as_ref().map(|s| s.mode.clone())?;
         let last = match mode {

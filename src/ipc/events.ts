@@ -9,6 +9,7 @@ import type { OsdEvent } from "./bindings/OsdEvent";
 import type { PlayerState } from "./bindings/PlayerState";
 import type { QueueState } from "./bindings/QueueState";
 import type { ResolvedKeymap } from "./bindings/ResolvedKeymap";
+import type { ScanProgress } from "./bindings/ScanProgress";
 import type { TimeEvent } from "./bindings/TimeEvent";
 import type { WaveformProgress } from "./bindings/WaveformProgress";
 import type { WindowState } from "./bindings/WindowState";
@@ -52,6 +53,9 @@ export const onBookmarksChanged = (handler: (event: BookmarksChanged) => void): 
 
 export const onPresetsChanged = (handler: () => void): Unlisten =>
   listen<null>("presets://changed", handler);
+
+export const onLibraryScan = (handler: (progress: ScanProgress) => void): Unlisten =>
+  listen<ScanProgress>("library://scan", handler);
 
 export const onCues = (handler: (event: CuesEvent) => void): Unlisten =>
   listen<CuesEvent>("media://cues", handler);

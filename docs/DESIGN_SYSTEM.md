@@ -754,13 +754,15 @@ Slides in from the left (380 px, between the bars, overlays video at `--chrome-a
 
 | Section | Views |
 |---|---|
-| **Videos** | All · Series (grouped by series → season → episodes) · Folders |
-| **Music** | Albums (grid of text cards: album / artist / year — no artwork fetching) · Artists · Tracks |
+| **Videos** | All · Series (a series opens to its episodes in season and episode order) · Folders |
+| **Music** | Albums (rows: album, artist · year, track count — no artwork fetching) · Artists · Tracks |
 | **Streams** | Sources → groups → channels; "+ Add M3U…" and "Open URL…" at top |
 | **Recent** | Last played with resume progress; "Clear history" in ⋯ |
 | **Folders** | Pinned folders as shortcuts → live folder browser (breadcrumb) with a 📌 toggle |
 | **Playlists** | Saved playlists; open one to view/reorder/rename |
 
+A row that only opens (a series, an album, a folder, a playlist, a stream list) opens on a click or Enter; its ▶ plays everything inside it.
+Inside an album, a series, a folder, or a playlist, "play now" plays on from that row.
 Item interaction: **Enter / double-click = play now (replace queue)**; `Shift+Enter` = play next; `Ctrl+Enter` = add to queue;
 hover reveals `▶` and `+` row buttons; right-click for the full menu. A watched item shows a muted check; partially watched shows the 2 px progress line.
 The drawer stays open after enqueueing (browse-while-playing) and closes on Esc, the title button, or outside click.

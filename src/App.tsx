@@ -17,6 +17,8 @@ import { useKeyboard } from "./features/chrome/useKeyboard";
 import { DebugOverlay } from "./features/debug/DebugOverlay";
 import { Dock } from "./features/dock/Dock";
 import { IdleScreen } from "./features/idle/IdleScreen";
+import { LibraryDrawer, LibraryScrim } from "./features/library/LibraryDrawer";
+import { PromptDialog } from "./features/library/PromptDialog";
 import { appReady } from "./ipc/commands";
 import { useAppStore } from "./stores/app";
 import { reportError } from "./stores/osd";
@@ -60,7 +62,10 @@ export function App() {
         {import.meta.env.DEV && !zen && <DebugOverlay info={info} />}
         <OsdFlash />
         <Chrome />
+        <LibraryScrim />
         <Dock />
+        <LibraryDrawer />
+        <PromptDialog />
         <ContextMenu />
         <Toasts />
         <DropHint />

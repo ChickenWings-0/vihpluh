@@ -170,3 +170,19 @@
     transparent 1px 8px
   );
 }
+
+/* The Library drawer slides in from the left (DESIGN_SYSTEM §11.1, §12: transform + opacity). */
+@keyframes vihpluh-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+
+.drawer-in {
+  animation: vihpluh-drawer-in var(--dur-base) var(--ease-out);
+}
+
+:root[data-reduce-motion="true"] .drawer-in {
+  animation: none;
+}
