@@ -8,4 +8,8 @@ kind: string,
 /**
  * Seconds left for a timed sleep.
  */
-remaining: number | null, };
+remaining: number | null, 
+/**
+ * The length chosen for a timed sleep.
+ */
+minutes: number | null, };

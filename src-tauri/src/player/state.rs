@@ -296,11 +296,7 @@ impl Mirror {
         } else if self.panscan >= 0.999 {
             "fill".to_string()
         } else {
-            match self.aspect_override.as_str() {
-                "no" | "-1" | "-1.000000" | "" => "auto".to_string(),
-                "2.39:1" => "2.39".to_string(),
-                other => other.to_string(),
-            }
+            aspect_name(&self.aspect_override)
         };
         set(&mut self.state.video.aspect, aspect)
     }
@@ -524,6 +520,33 @@ impl Mirror {
         };
         effects.state |= changed;
         effects
+    }
+}
+
+/// The Video tab's name for an `video-aspect-override` value. mpv reports ratios back as
+/// decimals (`16:9` → `1.777778`) and "no" as a number ≤ 0 (−1 or −2 by version).
+fn aspect_name(value: &str) -> String {
+    const NAMED: [(&str, f64); 5] = [
+        ("16:9", 16.0 / 9.0),
+        ("4:3", 4.0 / 3.0),
+        ("21:9", 21.0 / 9.0),
+        ("2.39", 2.39),
+        ("1:1", 1.0),
+    ];
+    let ratio = match value.split_once(':') {
+        Some((w, h)) => {
+            w.trim().parse::<f64>().ok().zip(h.trim().parse::<f64>().ok()).map(|(w, h)| w / h)
+        }
+        None => value.trim().parse::<f64>().ok(),
+    };
+    match ratio {
+        None if value == "no" || value.is_empty() => "auto".to_string(),
+        None => value.to_string(),
+        Some(r) if !r.is_finite() || r <= 0.0 => "auto".to_string(),
+        Some(r) => NAMED
+            .iter()
+            .find(|(_, named)| (r - named).abs() < 0.005)
+            .map_or_else(|| format!("{r:.2}"), |(name, _)| (*name).to_string()),
     }
 }
 
@@ -832,6 +855,15 @@ mod tests {
         m.on_event(&prop("panscan", Node::Double(0.0)));
         m.on_event(&text("video-aspect-override", "no"));
         assert_eq!(m.state.video.aspect, "auto");
+        m.on_event(&text("video-aspect-override", "16:9"));
+        m.on_event(&text("video-aspect-override", "-2.000000"));
+        assert_eq!(m.state.video.aspect, "auto", "mpv 0.42 reports `no` as -2");
+        m.on_event(&text("video-aspect-override", "1.777778"));
+        assert_eq!(m.state.video.aspect, "16:9", "ratios come back as decimals");
+        m.on_event(&text("video-aspect-override", "2.390000"));
+        assert_eq!(m.state.video.aspect, "2.39");
+        m.on_event(&text("video-aspect-override", "1.850000"));
+        assert_eq!(m.state.video.aspect, "1.85");
     }
 
     #[test]

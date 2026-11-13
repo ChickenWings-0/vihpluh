@@ -575,11 +575,11 @@ An item is marked `finished` at ≥ 95 % and its resume position cleared.
 | Volume | `volume` 0–`audio.max_volume` (default 130); `mute`. |
 | Audio device | `audio-device` from `audio-device-list`; hot-plug updates arrive via the observed list. |
 | Audio delay / sub delay | `audio-delay`, `sub-delay` (seconds; UI in ms). |
-| 10-band / parametric EQ | One labelled filter `@vihpluh-eq:lavfi=[volume=<preamp>dB,equalizer@b0=f=31:t=o:w=1:g=<g0>,…]`. Drag updates use `af-command vihpluh-eq gain <g> equalizer@bN` (and `af-command vihpluh-eq volume <p>dB volume` for the preamp), which change the running filter without rebuilding the chain **✔ VERIFIED (S4:** +12.0 dB measured for a +12 dB command, `af` unchanged**)**; adding/removing bands or changing type/Q replaces the filter, debounced 80 ms. Parametric bands map to `equalizer` (peaking), `bass` (low shelf), `treble` (high shelf). |
+| 10-band / parametric EQ | One labelled filter `@vihpluh-eq:lavfi=[volume=<preamp>dB,equalizer@b0=f=31:t=o:w=1:g=<g0>,…]`. Drag updates use `af-command vihpluh-eq gain <g> equalizer@bN` (and `af-command vihpluh-eq volume <p>dB volume` for the preamp), which change the running filter without rebuilding the chain **✔ VERIFIED (S4:** +12.0 dB measured for a +12 dB command, `af` unchanged**)**; adding/removing bands or changing type/Q replaces the filter, debounced 80 ms. Parametric bands map to `equalizer` (peaking), `bass` (low shelf), `treble` (high shelf). Live commands leave mpv's `af` text behind, and mpv rebuilds the filter from that text for the next file, so the core rewrites the entry when the next file starts (D29). The on/off switch and the chosen preset are saved to `audio.equalizer_enabled` / `audio.equalizer_preset`. |
 | Loudness normalisation | `@vihpluh-norm:lavfi=[dynaudnorm=g=5:f=250:r=0.9:p=0.5]` toggle. |
 | Brightness/contrast/saturation/gamma/hue | mpv properties of the same names (−100…100), applied on GPU. |
 | Rotate | `video-rotate` (0/90/180/270). |
-| Flip H/V | GPU user shaders `resources/shaders/flip_{h,v}.glsl` (`//!HOOK MAIN`) toggled via `change-list glsl-shaders toggle` (keeps zero-copy hwdec; subtitles stay readable — **✔ VERIFIED (S4)** on the Embed backend: mirrored picture, `hwdec-current` still `d3d11va`, subtitle unmirrored). Fallback `vf toggle hflip`. |
+| Flip H/V | GPU user shaders `resources/shaders/flip_{h,v}.glsl` (embedded, written to `<cache>/shaders/` at startup for mpv to load, D30) (`//!HOOK MAIN`) toggled via `change-list glsl-shaders toggle` (keeps zero-copy hwdec; subtitles stay readable — **✔ VERIFIED (S4)** on the Embed backend: mirrored picture, `hwdec-current` still `d3d11va`, subtitle unmirrored). Fallback `vf toggle hflip`. |
 | Zoom / pan | `video-zoom`, `video-pan-x`, `video-pan-y`. |
 | Aspect / fill | `video-aspect-override`, `panscan`, `keepaspect`. Presets: Auto, 16:9, 4:3, 21:9, 2.39:1, 1:1, Stretch, Fill (crop). |
 | Tone mapping | `tone-mapping`, `tone-mapping-mode`, `hdr-compute-peak`, `target-peak`. Option list is gated by `capabilities.renderer` (some curves are `gpu-next`-only). |
@@ -706,7 +706,7 @@ interface AppInfo {
 | `player_set_ab_loop` | `{ a: number \| null, b: number \| null }` | `void` |
 | `player_stop` | — | `void` |
 | `player_screenshot` | `{ subtitles: boolean }` | `string` (path); `mpv` error "nothing is playing" when idle |
-| `player_set_sleep_timer` | `{ kind: "off" \| "minutes" \| "end_of_file" \| "end_of_queue", minutes?: number }` | `void` |
+| `player_set_sleep_timer` | `{ kind: "off" \| "minutes" \| "end_of_file" \| "end_of_queue", minutes?: number }` | `void` (state: `sleep: { kind, remaining, minutes }`, `remaining` in whole seconds) |
 | `player_mpv_command` | `{ args: string[] }` (backs the `mpv.command` action only) | `void` |
 | `inspector_subscribe` | `{ enabled: boolean }` | `void` |
 
@@ -720,7 +720,7 @@ interface AppInfo {
 | `audio_set_device` | `{ name: string }` | `void` |
 | `audio_set_delay` | `{ ms: number }` | `void` |
 | `audio_set_eq` | `EqState` | `void` |
-| `audio_set_normalize` | `{ enabled: boolean }` | `void` |
+| `audio_set_normalize` | `{ enabled: boolean }` | `void` (writes `audio.normalize`; the core follows the setting) |
 | `eq_presets_list` / `eq_preset_save` / `eq_preset_delete` | — / `EqPreset` / `{ id }` | `EqPreset[]` / `void` / `void` |
 | `sub_set_delay` | `{ ms: number }` | `void` |
 | `sub_set_visible` | `{ visible: boolean }` | `void` |
@@ -729,7 +729,7 @@ interface AppInfo {
 | `sub_get_cues` | `{ trackId: number, from: number, to: number }` | `{ cues: Cue[], coverage: "full" \| "partial" \| "none", text: boolean }` |
 | `sub_automatch` | `{ scope: "queue" \| "folder", apply: boolean }` | `SubMatchReport` |
 | `fonts_list` | — | `string[]` (installed families) |
-| `video_set_adjust` | `Partial<VideoAdjust>` | `void` |
+| `video_set_adjust` | `Partial<VideoAdjust>` (`shaders` = full paths of user shaders) | `void` |
 | `video_reset` | — | `void` |
 | `video_set_margins` | `{ left: number, right: number, top: number, bottom: number }` (ratios 0–1) | `void` |
 | `shaders_list` | — | `{ name: string, path: string }[]` |
@@ -1476,6 +1476,8 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D26 | All menus, including the context menu, are one Radix dropdown primitive; the context menu is anchored to an invisible point | It opens the same way from a right-click, the ContextMenu key, or Shift+F10, and shares the menu renderer that shows live shortcuts. |
 | D27 | Pointer presses on sliders (seek bar, cone, parameter sliders) do not focus them; Tab does | DESIGN_SYSTEM §13: pointer use never leaves focus on chrome, so single-key shortcuts keep working and Escape is not spent returning focus. |
 | D28 | Toasts may carry a `group`; a newer toast of the same group replaces the older one in place | Three unplayable files in a row would otherwise stack two skip notices under the summary; the plan asks for one summary toast. |
+| D29 | After live EQ commands the core rewrites the `af` entry when the next file starts | `af-command` changes only the running filter; mpv builds the next file's filter from the option text, which would bring back the old curve. Rewriting at start-file costs no audible rebuild. |
+| D30 | The flip shaders are embedded in the binary and written to `<cache>/shaders/` at startup | mpv loads shaders from files, and the resources folder's location differs between dev, installed, and portable layouts. |
 
 ### Open risks (each owned by a Phase 1 spike)
 

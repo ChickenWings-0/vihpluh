@@ -99,19 +99,15 @@ pub fn from_config(config: &Config, screenshot_dir: &str) -> OptionList {
 
     // Video.
     let sync = if video.interpolation { VideoSync::DisplayResample } else { video.sync };
-    push(
-        &mut o,
-        "video-sync",
-        match sync {
-            VideoSync::Audio => "audio",
-            VideoSync::DisplayResample => "display-resample",
-        },
-    );
+    push(&mut o, "video-sync", sync.as_str());
     push(&mut o, "interpolation", yes_no(video.interpolation));
     push(&mut o, "deband", yes_no(video.deband));
     push(&mut o, "tone-mapping", video.tone_mapping.clone());
     push(&mut o, "target-peak", keyword_or_int(&video.target_peak));
     push(&mut o, "video-aspect-override", aspect_to_mpv(&video.default_aspect));
+    let (panscan, keep) = super::video::aspect_fit(&video.default_aspect);
+    push(&mut o, "panscan", panscan.to_string());
+    push(&mut o, "keepaspect", yes_no(keep));
 
     // Audio.
     push(&mut o, "audio-device", audio.device.clone());

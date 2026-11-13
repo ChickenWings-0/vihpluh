@@ -305,7 +305,7 @@ the wrong file (toasts now carry a group, D28, and the name comes from the queue
 
 ---
 
-## 7. Phase 5 — Sidebar: audio, video, playback — ☐ not started
+## 7. Phase 5 — Sidebar: audio, video, playback — ◐ in progress
 
 **Goal:** the right sidebar shell with three of its tabs, plus the quick track selectors in the bottom bar.
 

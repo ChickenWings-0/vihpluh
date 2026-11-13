@@ -27,7 +27,7 @@ const QUEUE_ERRORS: &str = "queue-errors";
 
 /// Per-load options from the request that caused it.
 #[derive(Debug, Clone, Default)]
-pub(super) struct LoadOpts {
+pub(crate) struct LoadOpts {
     /// mpv `start=` value; overrides any resume point.
     pub start: Option<String>,
     pub paused: Option<bool>,
@@ -382,7 +382,10 @@ impl Core {
         {
             db.spawn("mark finished", move |c| history::mark_finished(c, &key));
         }
-        let decision = self.queue.on_ended(self.config.playback.at_queue_end);
+        let decision = match self.sleep_at_end_of_file() {
+            Some(decision) => decision,
+            None => self.queue.on_ended(self.config.playback.at_queue_end),
+        };
         self.apply_decision(decision, LoadOpts::default());
     }
 
@@ -457,6 +460,9 @@ impl Core {
     /// Called every loop: periodic position saves, queue events, debounced session writes.
     pub(super) fn tick(&mut self) {
         let now = Instant::now();
+        self.tick_audio(now);
+        self.tick_sleep(now);
+        self.tick_inspector(now);
         if self.mirror.state.status == Status::Playing
             && now.duration_since(self.last_position_save) >= POSITION_SAVE_EVERY
         {

@@ -44,6 +44,7 @@ pub struct AppState {
     /// `None` when the database could not be opened (history and resume are then off).
     pub db: Option<Arc<library::db::Db>>,
     pub capabilities: Capabilities,
+    pub eq_presets: Arc<config::eq_presets::EqPresetStore>,
     revealed: AtomicBool,
 }
 
@@ -162,13 +163,19 @@ fn launch(
         }
     };
     let session_path = (!cli.no_session).then(|| paths.data.join("session.json"));
+    let eq_presets =
+        Arc::new(config::eq_presets::EqPresetStore::new(paths.config.join("eq-presets.toml")));
     let player = Player::start(
         config.clone(),
         surface,
         &paths.default_screenshot_dir(),
         &cli.mpv_opts,
-        db.clone(),
-        session_path.clone(),
+        player::Stores {
+            db: db.clone(),
+            session_path: session_path.clone(),
+            eq_presets: eq_presets.clone(),
+            shader_dir: paths.cache.join("shaders"),
+        },
     )?;
     let sources = media::files::expand_sources(&cli.sources);
     if !sources.is_empty() {
@@ -188,6 +195,7 @@ fn launch(
         player,
         db,
         capabilities,
+        eq_presets,
         revealed: AtomicBool::new(false),
     };
     let mut builder = tauri::Builder::default();
@@ -239,6 +247,17 @@ macro_rules! commands {
             ipc::commands::video::video_set_margins,
             ipc::commands::tracks::tracks_select,
             ipc::commands::audio::audio_set_delay,
+            ipc::commands::audio::audio_set_device,
+            ipc::commands::audio::audio_set_eq,
+            ipc::commands::audio::audio_set_normalize,
+            ipc::commands::audio::eq_presets_list,
+            ipc::commands::audio::eq_preset_save,
+            ipc::commands::audio::eq_preset_delete,
+            ipc::commands::video::video_set_adjust,
+            ipc::commands::video::video_reset,
+            ipc::commands::video::shaders_list,
+            ipc::commands::player::player_set_sleep_timer,
+            ipc::commands::player::inspector_subscribe,
             ipc::commands::sub::sub_set_delay,
             ipc::commands::sub::sub_set_visible,
             ipc::commands::config::config_get,

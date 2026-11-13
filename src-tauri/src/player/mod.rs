@@ -7,13 +7,18 @@
 //! [`Player`]: simple property writes go straight to mpv (asynchronously) and come back as
 //! events; anything that needs policy goes through the core.
 
+mod audio;
+pub mod equalizer;
 mod flow;
 pub mod hwdec;
+mod inspector;
 pub mod mpv;
 pub mod observe;
 pub mod options;
+pub mod sleep;
 pub mod state;
 pub mod tracks;
+pub mod video;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -27,9 +32,10 @@ use tauri::{AppHandle, Emitter};
 use ts_rs::TS;
 
 use crate::config::Config;
+use crate::config::eq_presets::EqPresetStore;
 use crate::ipc::dto::{
-    AbLoop, Direction, OpenRequest, OsdEvent, OsdKind, PlayerState, SeekKind, SeekRequest, Status,
-    TimeEvent, TrackSlot,
+    AbLoop, Direction, EqState, OpenRequest, OsdEvent, OsdKind, PlayerState, SeekKind, SeekRequest,
+    SleepRequest, Status, TimeEvent, TrackSlot, VideoPatch,
 };
 use crate::ipc::events;
 use crate::library::db::Db;
@@ -79,6 +85,11 @@ enum CoreMsg {
     Prepared(Box<Prepared>),
     Ui(UiPatch),
     Restore(Box<Session>),
+    Video(Box<VideoPatch>),
+    VideoReset,
+    Eq(Box<EqState>),
+    Sleep(SleepRequest),
+    Inspector(bool),
     Shutdown,
 }
 
@@ -107,6 +118,17 @@ pub struct DebugStats {
 pub struct Versions {
     pub mpv: String,
     pub ffmpeg: String,
+}
+
+/// Where the core keeps and finds its files (`Player::start`).
+pub struct Stores {
+    /// `None` when the database could not be opened (history and resume are then off).
+    pub db: Option<Arc<Db>>,
+    /// `None` with `--no-session`.
+    pub session_path: Option<PathBuf>,
+    pub eq_presets: Arc<EqPresetStore>,
+    /// Where the shipped flip shaders are written for mpv to load.
+    pub shader_dir: PathBuf,
 }
 
 /// The handle IPC code talks to.
@@ -142,9 +164,9 @@ impl Player {
         surface: Arc<dyn VideoSurface>,
         default_screenshot_dir: &std::path::Path,
         cli_mpv_opts: &[(String, String)],
-        db: Option<Arc<Db>>,
-        session_path: Option<PathBuf>,
+        stores: Stores,
     ) -> Result<Arc<Self>, PlayerError> {
+        let Stores { db, session_path, eq_presets, shader_dir } = stores;
         let _ = DEFAULT_SCREENSHOT_DIR.set(default_screenshot_dir.display().to_string());
         let caps = surface.capabilities();
         let chain =
@@ -190,6 +212,7 @@ impl Player {
         };
 
         let app = Arc::new(OnceLock::new());
+        let flip_shaders = video::write_flip_shaders(&shader_dir);
         let mirror = Mirror::new(&config);
         let snapshot = Arc::new(RwLock::new(mirror.state.clone()));
         let max_volume = Arc::new(RwLock::new(f64::from(config.audio.max_volume)));
@@ -232,6 +255,12 @@ impl Player {
                 session_path,
                 session_due: None,
                 ui: ui.clone(),
+                eq_presets,
+                filters: audio::Filters::default(),
+                flip_shaders,
+                inspector: false,
+                last_inspector: Instant::now(),
+                sleep: None,
             };
             std::thread::Builder::new()
                 .name("core".into())
@@ -457,6 +486,30 @@ impl Player {
         self.set(property, Value::Text(value))
     }
 
+    pub fn set_video(&self, patch: VideoPatch) {
+        self.send(CoreMsg::Video(Box::new(patch)));
+    }
+
+    pub fn reset_video(&self) {
+        self.send(CoreMsg::VideoReset);
+    }
+
+    pub fn set_eq(&self, eq: EqState) {
+        self.send(CoreMsg::Eq(Box::new(eq)));
+    }
+
+    pub fn set_audio_device(&self, name: &str) -> Result<(), MpvError> {
+        self.set("audio-device", Value::Text(name.to_string()))
+    }
+
+    pub fn set_sleep(&self, request: SleepRequest) {
+        self.send(CoreMsg::Sleep(request));
+    }
+
+    pub fn subscribe_inspector(&self, enabled: bool) {
+        self.send(CoreMsg::Inspector(enabled));
+    }
+
     /// Takes a screenshot and returns its path. Waits for mpv to write the file. Fails when
     /// nothing is loaded (mpv would otherwise save a blank picture).
     pub fn screenshot(&self, subtitles: bool) -> Result<String, MpvError> {
@@ -602,10 +655,18 @@ struct Core {
     session_path: Option<PathBuf>,
     session_due: Option<Instant>,
     ui: Arc<RwLock<UiState>>,
+    eq_presets: Arc<EqPresetStore>,
+    filters: audio::Filters,
+    flip_shaders: video::FlipShaders,
+    /// The Playback tab's stream inspector is open.
+    inspector: bool,
+    last_inspector: Instant,
+    sleep: Option<sleep::Sleep>,
 }
 
 impl Core {
     fn run(&mut self, rx: &Receiver<CoreMsg>) {
+        self.init_audio_filters();
         loop {
             match rx.recv_timeout(self.next_wait()) {
                 Ok(CoreMsg::Shutdown) | Err(RecvTimeoutError::Disconnected) => break,
@@ -631,6 +692,16 @@ impl Core {
         if self.dirty {
             wait = wait.min((self.last_patch + PATCH_INTERVAL).saturating_duration_since(now));
         }
+        if let Some(due) = self.filters.eq_rebuild_due {
+            wait = wait.min(due.saturating_duration_since(now));
+        }
+        if self.inspector {
+            let due = self.last_inspector + inspector::INSPECTOR_INTERVAL;
+            wait = wait.min(due.saturating_duration_since(now));
+        }
+        if self.sleep.as_ref().is_some_and(sleep::Sleep::is_fading) {
+            wait = wait.min(sleep::FADE_STEP);
+        }
         if self.time_now {
             wait = Duration::ZERO;
         } else if self.time_dirty {
@@ -653,6 +724,14 @@ impl Core {
             CoreMsg::Prepared(prepared) => self.on_prepared(prepared),
             CoreMsg::Ui(patch) => self.set_ui(patch),
             CoreMsg::Restore(session) => self.restore_session(*session),
+            CoreMsg::Video(patch) => self.set_video(&patch),
+            CoreMsg::VideoReset => {
+                let patch = video::reset_patch(&self.config);
+                self.set_video(&patch);
+            }
+            CoreMsg::Eq(eq) => self.set_eq(*eq),
+            CoreMsg::Sleep(request) => self.set_sleep(request),
+            CoreMsg::Inspector(enabled) => self.set_inspector(enabled),
             CoreMsg::Shutdown => {}
         }
     }
@@ -689,6 +768,7 @@ impl Core {
             }
             Event::EndFile { reason, error } => tracing::debug!(?reason, ?error, "end of file"),
             Event::FileLoaded => tracing::debug!("file loaded"),
+            Event::StartFile => self.on_start_file(),
             Event::PlaybackRestart => tracing::debug!("playback restart (first frame shown)"),
             _ => {}
         }
@@ -702,6 +782,9 @@ impl Core {
         }
         if self.mirror.state.hwdec != before_hwdec {
             self.on_hwdec_changed();
+        }
+        if matches!(event, Event::PropertyChange { name, .. } if name == "audio-device-list") {
+            self.check_audio_device();
         }
         match event {
             Event::FileLoaded => self.on_file_loaded(),
@@ -790,7 +873,8 @@ impl Core {
         if let Ok(mut max) = self.max_volume.write() {
             *max = f64::from(config.audio.max_volume);
         }
-        self.config = config;
+        let old = std::mem::replace(&mut self.config, config);
+        self.audio_config_changed(&old);
     }
 
     // ── Output ──────────────────────────────────────────────────────────────

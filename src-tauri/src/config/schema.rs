@@ -276,6 +276,15 @@ pub enum VideoSync {
     DisplayResample,
 }
 
+impl VideoSync {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Audio => "audio",
+            Self::DisplayResample => "display-resample",
+        }
+    }
+}
+
 /// A value that is either a number or a keyword such as `"auto"` / `"max"`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(untagged)]

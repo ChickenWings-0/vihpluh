@@ -2,7 +2,7 @@ use tauri::State;
 
 use crate::AppState;
 use crate::error::{AppError, AppResult};
-use crate::ipc::dto::{AbLoop, Direction, OpenRequest, PlayerState, SeekRequest};
+use crate::ipc::dto::{AbLoop, Direction, OpenRequest, PlayerState, SeekRequest, SleepRequest};
 
 #[tauri::command]
 pub fn player_snapshot(state: State<'_, AppState>) -> PlayerState {
@@ -100,4 +100,14 @@ pub fn player_mpv_command(state: State<'_, AppState>, args: Vec<String>) -> AppR
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     state.player.mpv_command(&args)?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn player_set_sleep_timer(state: State<'_, AppState>, req: SleepRequest) {
+    state.player.set_sleep(req);
+}
+
+#[tauri::command]
+pub fn inspector_subscribe(state: State<'_, AppState>, enabled: bool) {
+    state.player.subscribe_inspector(enabled);
 }

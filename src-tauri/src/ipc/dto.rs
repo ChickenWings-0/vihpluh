@@ -220,6 +220,8 @@ pub struct SleepTimer {
     pub kind: String,
     /// Seconds left for a timed sleep.
     pub remaining: Option<f64>,
+    /// The length chosen for a timed sleep.
+    pub minutes: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -331,6 +333,122 @@ impl Default for EqState {
                 .collect(),
         }
     }
+}
+
+/// `video_set_adjust` — any subset of [`VideoAdjust`].
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields)]
+pub struct VideoPatch {
+    pub brightness: Option<f64>,
+    pub contrast: Option<f64>,
+    pub saturation: Option<f64>,
+    pub gamma: Option<f64>,
+    pub hue: Option<f64>,
+    pub rotate: Option<u32>,
+    pub flip_h: Option<bool>,
+    pub flip_v: Option<bool>,
+    pub zoom: Option<f64>,
+    pub pan_x: Option<f64>,
+    pub pan_y: Option<f64>,
+    pub aspect: Option<String>,
+    pub tone_mapping: Option<String>,
+    pub deband: Option<bool>,
+    pub interpolation: Option<bool>,
+    /// Full paths of the user shaders to run, in order (the flip shaders are separate).
+    pub shaders: Option<Vec<String>>,
+}
+
+/// A shader file in `<config>/shaders/` (`shaders_list`).
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ShaderEntry {
+    pub name: String,
+    pub path: String,
+}
+
+/// An equalizer preset (KEYBINDS_AND_CONFIG §5.12).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct EqPreset {
+    pub id: String,
+    pub name: String,
+    /// `"graphic10" | "parametric"`
+    pub mode: String,
+    pub preamp_db: f64,
+    pub bands: Vec<EqBand>,
+    /// Shipped with vihpluh (a user preset with the same id replaces it).
+    #[serde(default)]
+    pub builtin: bool,
+}
+
+/// `player_set_sleep_timer`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum SleepKind {
+    Off,
+    Minutes,
+    EndOfFile,
+    EndOfQueue,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SleepRequest {
+    pub kind: SleepKind,
+    #[serde(default)]
+    #[ts(optional)]
+    pub minutes: Option<f64>,
+}
+
+/// `player://inspector` — the Playback tab's stream info (DESIGN_SYSTEM §10.4), 2 Hz while
+/// subscribed. Values mpv does not report are null.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct InspectorStats {
+    pub video_codec: Option<String>,
+    #[ts(type = "number | null")]
+    pub width: Option<i64>,
+    #[ts(type = "number | null")]
+    pub height: Option<i64>,
+    pub fps: Option<f64>,
+    pub display_fps: Option<f64>,
+    pub pixel_format: Option<String>,
+    #[ts(type = "number | null")]
+    pub bit_depth: Option<i64>,
+    pub primaries: Option<String>,
+    pub transfer: Option<String>,
+    pub video_bitrate: Option<f64>,
+    pub hwdec: Option<String>,
+    pub vo: Option<String>,
+    #[ts(type = "number")]
+    pub dropped_frames: i64,
+    #[ts(type = "number")]
+    pub decoder_dropped_frames: i64,
+    #[ts(type = "number")]
+    pub delayed_frames: i64,
+    pub audio_codec: Option<String>,
+    #[ts(type = "number | null")]
+    pub sample_rate: Option<i64>,
+    pub channels: Option<String>,
+    pub audio_bitrate: Option<f64>,
+    pub audio_out: Option<String>,
+    pub ao: Option<String>,
+    pub sub_codec: Option<String>,
+    pub sub_lang: Option<String>,
+    pub sub_title: Option<String>,
+    pub container: Option<String>,
+    #[ts(type = "number | null")]
+    pub file_size: Option<i64>,
+    pub path: Option<String>,
+    pub cache_seconds: Option<f64>,
+    #[ts(type = "number | null")]
+    pub cache_bytes: Option<i64>,
 }
 
 // ── Event payloads (§7.4) ───────────────────────────────────────────────────

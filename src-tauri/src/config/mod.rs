@@ -3,6 +3,7 @@
 //! The user file holds only overrides. Unknown keys are left alone and reported once; invalid
 //! values fall back to the default and are reported by key.
 
+pub mod eq_presets;
 pub mod keybinds;
 pub mod schema;
 pub mod store;
