@@ -5,6 +5,7 @@
  */
 import {
   AudioLines,
+  Captions,
   Crop,
   FlipHorizontal2,
   FlipVertical2,
@@ -378,6 +379,7 @@ const sidebarActions: Action[] = [
       return undefined;
     },
   },
+  tabAction("ui.sidebar_subtitles", "Subtitles panel", "subtitles", Captions),
   tabAction("ui.sidebar_audio", "Audio panel", "audio", AudioLines),
   tabAction("ui.sidebar_video", "Video panel", "video", Video),
   tabAction("ui.sidebar_playback", "Playback panel", "playback", SlidersHorizontal),

@@ -562,10 +562,15 @@ pub(super) fn format_clock(seconds: f64) -> String {
     if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
 }
 
-/// What to remember about a selected track (`None` id = nothing selected).
+/// What to remember about a selected track (`None` id = nothing selected). "Off" is only a
+/// choice when there was a subtitle track to turn off; a file that had none must not keep
+/// subtitles away once a file is linked to it.
 fn remember(tracks: &[Track], id: Option<i64>, allow_off: bool) -> Option<TrackMemory> {
+    let has_subs = tracks.iter().any(|t| t.kind == TrackKind::Sub);
     match id {
-        None if allow_off => Some(TrackMemory { off: true, lang: None, title: None, id: None }),
+        None if allow_off && has_subs => {
+            Some(TrackMemory { off: true, lang: None, title: None, id: None })
+        }
         None => None,
         Some(id) => tracks.iter().find(|t| t.id == id).map(|t| TrackMemory {
             off: false,
@@ -655,5 +660,6 @@ mod tests {
         assert_eq!(sub.lang.as_deref(), Some("eng"));
         assert!(remember(&tracks, None, true).unwrap().off);
         assert!(remember(&tracks, None, false).is_none());
+        assert!(remember(&[], None, true).is_none(), "no subtitle track: nothing was turned off");
     }
 }

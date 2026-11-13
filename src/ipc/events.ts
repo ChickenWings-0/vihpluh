@@ -1,5 +1,6 @@
 /** Typed subscriptions to core events (ARCHITECTURE §7.4). */
 import type { ConfigChanged } from "./bindings/ConfigChanged";
+import type { CuesEvent } from "./bindings/CuesEvent";
 import type { DebugStats } from "./bindings/DebugStats";
 import type { InspectorStats } from "./bindings/InspectorStats";
 import type { OpenEvent } from "./bindings/OpenEvent";
@@ -44,6 +45,9 @@ export const onWindowState = (handler: (state: WindowState) => void): Unlisten =
 
 export const onInspector = (handler: (stats: InspectorStats) => void): Unlisten =>
   listen<InspectorStats>("player://inspector", handler);
+
+export const onCues = (handler: (event: CuesEvent) => void): Unlisten =>
+  listen<CuesEvent>("media://cues", handler);
 
 export const onWaveform = (handler: (progress: WaveformProgress) => void): Unlisten =>
   listen<WaveformProgress>("media://waveform", handler);

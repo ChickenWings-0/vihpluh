@@ -13,11 +13,11 @@ export type DropHint = "replace" | "enqueue" | null;
 /** The right dock hosts one panel at a time (DESIGN_SYSTEM §6.1). */
 export type DockPanel = "queue" | "sidebar" | null;
 
-/** Sidebar tabs available so far (Subtitles and Bookmarks arrive in Phases 7 and 8). */
-export const SIDEBAR_TABS = ["audio", "video", "playback"] as const;
+/** Sidebar tabs available so far (Bookmarks arrives in Phase 8). */
+export const SIDEBAR_TABS = ["subtitles", "audio", "video", "playback"] as const;
 export type SidebarTab = (typeof SIDEBAR_TABS)[number];
 const asTab = (tab: string): SidebarTab =>
-  (SIDEBAR_TABS as readonly string[]).includes(tab) ? (tab as SidebarTab) : "audio";
+  (SIDEBAR_TABS as readonly string[]).includes(tab) ? (tab as SidebarTab) : "subtitles";
 
 /** Maps a drop point to a queue position when the pointer is over the queue panel. */
 export type DropResolver = (x: number, y: number) => number | null;
@@ -93,7 +93,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   keyContext: "global",
   dropHint: null,
   dock: null,
-  sidebarTab: "audio",
+  sidebarTab: "subtitles",
   inspectorRequest: 0,
   dockDragWidth: null,
   dropResolver: null,

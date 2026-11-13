@@ -19,7 +19,8 @@ export interface WaveformState {
 
 const NONE: WaveformState = { wave: null, progress: null };
 
-export function useWaveform(): WaveformState {
+/** `force` asks for the waveform even when the seek-bar waveform is off (subtitle timeline). */
+export function useWaveform(force = false): WaveformState {
   const key = usePlayer((s) => s.media?.key ?? "") ?? "";
   const isUrl = usePlayer((s) => s.media?.isUrl ?? false) ?? false;
   const track = usePlayer((s) => s.selected.audio) ?? null;
@@ -27,7 +28,7 @@ export function useWaveform(): WaveformState {
   const mode = useConfig((c) => c.performance.waveform) ?? "on_demand";
   const [state, setState] = useState<WaveformState>(NONE);
 
-  const wanted = mode !== "off" && (shown || mode === "always");
+  const wanted = mode !== "off" && (force || shown || mode === "always");
   const enabled = wanted && key !== "" && !isUrl && track !== null;
 
   useEffect(() => {

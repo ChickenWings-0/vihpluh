@@ -339,12 +339,14 @@ pub fn plan(videos: &[String], subs: &[String]) -> SubMatchReport {
             by_lang.entry(split_language(stem_of(&subs[s])).lang).or_default().push((s, points));
         }
         let mut chosen = Vec::new();
+        let mut undecided = false;
         for (lang, mut group) in by_lang {
             group.sort_by(|a, b| b.1.cmp(&a.1).then(subs[a.0].cmp(&subs[b.0])));
             let top = group[0].1;
             let close: Vec<&(usize, u32)> =
                 group.iter().filter(|(_, p)| top - p <= AMBIGUITY_MARGIN).collect();
             if close.len() > 1 {
+                undecided = true;
                 report.ambiguous.push(Ambiguity {
                     video: video.clone(),
                     lang: lang.map(str::to_string),
@@ -359,7 +361,10 @@ pub fn plan(videos: &[String], subs: &[String]) -> SubMatchReport {
             }
         }
         if chosen.is_empty() {
-            report.unmatched_videos.push(video.clone());
+            // A video with only ambiguous candidates is listed there, not as "nothing found".
+            if !undecided {
+                report.unmatched_videos.push(video.clone());
+            }
         } else {
             report.matched.push(SubMatch { video: video.clone(), subs: chosen });
         }
@@ -484,6 +489,7 @@ mod tests {
         assert_eq!(report.ambiguous.len(), 1);
         assert_eq!(report.ambiguous[0].lang.as_deref(), Some("eng"));
         assert_eq!(report.ambiguous[0].subs.len(), 2);
+        assert_eq!(report.unmatched_videos, Vec::<String>::new());
         // The unambiguous language still pairs.
         assert_eq!(subs_of(&report, "D:/s/Show S01E2.mkv"), vec!["D:/s/Subs/show.1x02.es.srt"]);
     }

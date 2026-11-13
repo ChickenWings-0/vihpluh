@@ -376,33 +376,47 @@ documented temp-file fallback until spike S2 checks FIFOs.
 
 ---
 
-## 9. Phase 7 — Subtitle suite — ☐ not started
+## 9. Phase 7 — Subtitle suite — ☑ closed (Windows, 2026-11-13) — Linux pending; two checks pending (see notes)
 
 **Goal:** the Subtitles tab in full — live sync tools, the visual timeline, styling, and one-click auto-matching.
 
-- [ ] **Subtitles tab** layout (D§10.1): track select, visibility, add file, delay row (±5 s range, 10 ms steps), style section.
-- [ ] Style controls → `sub_set_style`: font picker (`fonts_list`, each family rendered in its face, virtualised), exact size + S/M/L/XL, colours, outline, background box, position, ASS override segmented control with tooltip.
-- [ ] `subtitles/cues.rs`: SRT, ASS/SSA, WebVTT parsers (fixtures + unit tests incl. malformed input, BOMs, CRLF, overlapping cues).
-- [ ] `subtitles/mkv.rs`: embedded text-subtitle extraction via `matroska-demuxer` off-thread, cue cache (`cache/cues/`).
-- [ ] Progressive cue recording for other formats (A§11.3); `sub_get_cues` with `coverage`; `media://cues`.
-- [ ] **Subtitle timeline** (D§10.1): scrolling canvas (waveform + cue lane), fixed playhead, zoom levels, drag-cues-to-shift-delay with live update of slider/value, Shift-snap to onsets, drag-waveform-to-scrub, prev/next "cue to now" buttons, hatch for unknown coverage.
-- [ ] `subtitles/automatch.rs` (A§10.5) with unit tests on synthetic folder listings (T6-like naming chaos, language suffixes, ambiguity); `sub_automatch`; `sub_links` persistence and application at load.
-- [ ] Auto-match result card + Apply; entry points in popover, tab, and action `subtitles.automatch`.
-- [ ] Subtitle actions from K§2 (delay, sync-to-cue, size, position, add file).
-- [ ] `presets/series.rs` series-key parser with the A§10.2 test vectors (needed by auto-match now, presets next phase).
+- [x] **Subtitles tab** layout (D§10.1): track select, visibility, add file, delay row (±5 s range, 10 ms steps), style section. *(An external track is named by its file and has a remove button.)*
+- [x] Style controls → `sub_set_style`: font picker (`fonts_list`, each family rendered in its face, virtualised), exact size + S/M/L/XL, colours, outline, background box, position, ASS override segmented control with tooltip. *(Live for the session, like the Video tab; defaults stay in `subtitles.*`.)*
+- [x] `subtitles/cues.rs`: SRT, ASS/SSA, WebVTT parsers (fixtures + unit tests incl. malformed input, BOMs, CRLF, overlapping cues).
+- [x] `subtitles/mkv.rs`: embedded text-subtitle extraction via `matroska-demuxer` off-thread, cue cache (`cache/cues/`). *(A sequential read; the crate does not expose the Cues index — see A§11.3.)*
+- [x] Progressive cue recording for other formats (A§11.3); `sub_get_cues` with `coverage`; `media://cues`.
+- [x] **Subtitle timeline** (D§10.1): scrolling canvas (waveform + cue lane), fixed playhead, zoom levels, drag-cues-to-shift-delay with live update of slider/value, Shift-snap to onsets, drag-waveform-to-scrub, prev/next "cue to now" buttons, hatch for unknown coverage. *(Two pre-drawn strips moved by transform, D33.)*
+- [x] `subtitles/automatch.rs` (A§10.5) with unit tests on synthetic folder listings (T6-like naming chaos, language suffixes, ambiguity); `sub_automatch`; `sub_links` persistence and application at load.
+- [x] Auto-match result card + Apply; entry points in popover, tab, and action `subtitles.automatch`.
+- [x] Subtitle actions from K§2 (delay, sync-to-cue, size, position, add file). *(The add-file dialog itself is not yet exercised; see notes.)*
+- [x] `presets/series.rs` series-key parser with the A§10.2 test vectors (needed by auto-match now, presets next phase).
 
 ### Verification
 
-- [ ] With T8 (known offset): dragging the cue lane until speech onsets line up yields the known offset within ±50 ms; `Ctrl+G`/`Ctrl+H` sync-to-cue matches the buttons.
-- [ ] Delay slider, value field, timeline, and `G`/`H` keys all stay in agreement during interaction.
-- [ ] Timeline scrolls smoothly at 60 fps during playback at all zoom levels; no drift between cue blocks and displayed subtitles over 10 min.
-- [ ] T5 (embedded ASS): full coverage appears within a few seconds of load and is cached (second load instant). T7 (PGS): blocks without text appear progressively; hatch covers unknown regions.
-- [ ] Style changes preview live; with T5 the four ASS modes behave as their tooltips say; a font with CJK glyphs renders.
-- [ ] Auto-match on T6: all episodes paired despite different names; a deliberately ambiguous pair is reported, not guessed; after Apply, each episode loads its subtitle on Next.
-- [ ] Removing a `sub_link` (delete the external track) persists.
-- [ ] Parser/automatch/series unit tests green; fuzz-ish malformed fixtures don't panic.
+- [x] With T8 (known offset): dragging the cue lane until speech onsets line up yields the known offset within ±50 ms; `Ctrl+G`/`Ctrl+H` sync-to-cue matches the buttons. *(Subtitles authored 400 ms early: a Shift-drag snapped to +420 ms — the tone's onset in the decoded audio sits one 20 ms waveform step after the nominal second. A plain drag of 0.25 s gave exactly +250 ms. `Ctrl+H` and "Next to now" both gave −2610 ms; `Ctrl+G` and "Prev to now" both +5390 ms.)*
+- [x] Delay slider, value field, timeline, and `G`/`H` keys all stay in agreement during interaction. *(After a lane drag, after sync-to-cue, and after single and rapid `G`/`H` presses, the field, the slider's value text, and mpv's `sub-delay` matched.)*
+- [x] Timeline scrolls smoothly at 60 fps during playback at all zoom levels; no drift between cue blocks and displayed subtitles over 10 min. *(144 fps on the 144 Hz panel at ±4 / ±8 / ±15 / ±30 s; over 12 s at ±4 s and 14 s at ±8 s no frame gap exceeded 16.7 ms. Sampled at 10 Hz for 60 s (the test files are 2 min long, not 10), the line under the playhead matched mpv's `sub-text` in 556 of 558 samples; the two misses were within 33 ms of a cue edge.)*
+- [ ] T5 (embedded ASS): full coverage appears within a few seconds of load and is cached (second load instant). T7 (PGS): blocks without text appear progressively; hatch covers unknown regions. *(T5 ✓: 40 cues in 200 ms, from the cache in 22 ms on the next load; T1's two tracks (694 MB file) in 353 ms. The progressive path ✓ with MP4 text subtitles: cues appeared as playback reached them, coverage `partial`, hatch shown. A PGS file could not be made here — ffmpeg has no PGS encoder — so bitmap subtitles are unchecked.)*
+- [x] Style changes preview live; with T5 the four ASS modes behave as their tooltips say; a font with CJK glyphs renders. *(Size preset, box, and mode clicks reached mpv at once. Frames taken with mpv's own screenshot: Keep and Scale show the author's yellow Arial and the sign at the top; Override puts the dialogue in the chosen font and colour and leaves the sign alone; Strip shows both as plain text at the bottom. 日本語 renders in the original style and in MS Gothic.)*
+- [x] Auto-match on T6: all episodes paired despite different names; a deliberately ambiguous pair is reported, not guessed; after Apply, each episode loads its subtitle on Next. *(Nine episodes paired from nine differently named files (`show.1x03.en.srt`, `Show - 02 [Group].eng.srt`, `Subs/Show S01E8/2_English.srt`, …); episode 9's two equally good English files were listed as ambiguous and not attached. After Apply, episodes 2, 3, 4, and 10 each loaded and showed their own file on Next.)*
+- [x] Removing a `sub_link` (delete the external track) persists. *(A file added by hand came back when the media was reopened; after removing the track it did not.)*
+- [x] Parser/automatch/series unit tests green; fuzz-ish malformed fixtures don't panic.
 
 **Platforms:** W + L-Wayland.
+
+**Phase 7 notes (2026-11-13, Windows only).** Driven through the webview's DevTools channel in
+the quiet, muted test build; pictures were checked with mpv's own screenshot command, not a screen
+capture. Still open: bitmap (PGS) subtitles on the timeline, for want of a test file, and the
+"Add subtitle file…" dialog, which needs a person (the command behind it was exercised directly).
+Found and fixed: the first timeline repainted a canvas every frame, which halved the webview's
+frame rate over video — the lanes are now two pre-drawn strips moved by whole device pixels (D33);
+reading embedded subtitles took 2.4 s for a 43 MB file because every seek refilled the read buffer
+(200 ms now); `sub-margin-y` is an integer to mpv and rejected a double; a video with only
+ambiguous candidates was also listed as "no subtitle found"; "subtitles off" was remembered for
+files that had no subtitle track, which kept a newly linked file from showing (D34). mpv reports
+`sub-start` / `sub-end` in the file's own time, before `sub-delay`. Noticed, not changed: a second
+screenshot within the same second fails, because the default name template has one-second
+resolution.
 
 ---
 
@@ -576,7 +590,7 @@ Fill in as phases close (✓ works · ◐ works with documented limitation · �
 | Sleep inhibit | | | |
 | Seek thumbnails | | | |
 | Waveform | | | |
-| Subtitle timeline + auto-match | | | |
+| Subtitle timeline + auto-match | ✓ | | |
 | Presets | | | |
 | Library + watch folders | | | |
 | IPTV / network streams | | | |

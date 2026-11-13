@@ -2,7 +2,7 @@
 //! are read straight from the container, off-thread, so the whole timeline is known a moment
 //! after the file opens instead of growing as playback goes.
 
-use std::io::{BufReader, Read, Seek};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -40,7 +40,43 @@ pub fn extract_file(
     cancel: &AtomicBool,
 ) -> Result<Option<Vec<Cue>>, MkvError> {
     let file = std::fs::File::open(path)?;
-    extract(BufReader::with_capacity(1 << 20, file), sub_index, cancel)
+    extract(
+        Buffered { inner: BufReader::with_capacity(256 * 1024, file), pos: 0 },
+        sub_index,
+        cancel,
+    )
+}
+
+/// A `BufReader` that keeps its buffer across short seeks. The demuxer seeks to every block
+/// header; `BufReader::seek` would throw the buffer away each time and re-read it from disk.
+struct Buffered<R> {
+    inner: BufReader<R>,
+    pos: u64,
+}
+
+impl<R: Read> Read for Buffered<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl<R: Read + Seek> Seek for Buffered<R> {
+    fn seek(&mut self, to: SeekFrom) -> std::io::Result<u64> {
+        let target = match to {
+            SeekFrom::Start(at) => at,
+            SeekFrom::Current(by) => self.pos.saturating_add_signed(by),
+            SeekFrom::End(_) => {
+                self.pos = self.inner.seek(to)?;
+                return Ok(self.pos);
+            }
+        };
+        let by = target as i64 - self.pos as i64;
+        self.inner.seek_relative(by)?;
+        self.pos = target;
+        Ok(target)
+    }
 }
 
 pub fn extract<R: Read + Seek>(
@@ -159,6 +195,15 @@ mod tests {
         }
         let garbage = vec![0xA5u8; 4096];
         assert!(extract(Cursor::new(garbage), 0, &AtomicBool::new(false)).is_err());
+    }
+
+    #[test]
+    fn the_buffered_reader_gives_the_same_cues_as_a_plain_one() {
+        let reader = Buffered { inner: BufReader::with_capacity(64, Cursor::new(FIXTURE)), pos: 0 };
+        let cues = extract(reader, 1, &AtomicBool::new(false)).unwrap();
+        assert_eq!(cues, extract_fixture(1));
+        let reader = Buffered { inner: BufReader::with_capacity(64, Cursor::new(FIXTURE)), pos: 0 };
+        assert_eq!(extract(reader, 0, &AtomicBool::new(false)).unwrap(), extract_fixture(0));
     }
 
     #[test]

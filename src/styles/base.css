@@ -161,3 +161,12 @@
     animation: none;
   }
 }
+
+/* Subtitle timeline: stretches whose cues are not known yet (DESIGN_SYSTEM §10.1). */
+.timeline-hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--border-subtle) 0 1px,
+    transparent 1px 8px
+  );
+}

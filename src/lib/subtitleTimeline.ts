@@ -138,8 +138,16 @@ export interface Block {
   current: boolean;
 }
 
-/** Cue blocks to draw: shifted by the delay, clipped to cues that touch the view. */
-export function layoutCues(cues: readonly Cue[], delayMs: number, view: View): Block[] {
+/**
+ * Cue blocks to draw: shifted by the delay, clipped to cues that touch the view. `now` is the
+ * playhead time for the "current" mark (the view's centre unless the view is a wider strip).
+ */
+export function layoutCues(
+  cues: readonly Cue[],
+  delayMs: number,
+  view: View,
+  now: number = view.position,
+): Block[] {
   const shift = delayMs / 1000;
   const blocks: Block[] = [];
   for (const cue of cues) {
@@ -152,8 +160,44 @@ export function layoutCues(cues: readonly Cue[], delayMs: number, view: View): B
       x,
       width: Math.max(2, right - x),
       text: cue.text,
-      current: view.position >= start && view.position < end,
+      current: now >= start && now < end,
     });
   }
   return blocks;
+}
+
+/** How many view-widths wide the pre-drawn strips are. */
+export const STRIP_FACTOR = 2;
+
+/** The view a strip is drawn with: same scale as `view`, `STRIP_FACTOR` times as wide. */
+export function stripView(view: View): View {
+  return {
+    position: view.position,
+    span: view.span * STRIP_FACTOR,
+    width: view.width * STRIP_FACTOR,
+  };
+}
+
+/**
+ * How far (CSS px, negative = left) to shift a strip drawn around `drawnAt` so that `time`
+ * sits under the playhead at the centre of the view.
+ */
+export function stripOffset(view: View, drawnAt: number, time: number): number {
+  const side = (STRIP_FACTOR - 1) / 2;
+  return -((time - drawnAt) * pxPerSecond(view) + side * view.width);
+}
+
+/** Whether a strip drawn around `drawnAt` still covers the whole view when centred on `time`. */
+export function stripCovers(view: View, drawnAt: number, time: number): boolean {
+  return Math.abs(time - drawnAt) <= view.span * (STRIP_FACTOR - 1) * 0.75;
+}
+
+/** The start time of the cue under `now` (with the delay applied), or null. */
+export function currentCueStart(cues: readonly Cue[], delayMs: number, now: number): number | null {
+  const t = now - delayMs / 1000;
+  for (const cue of cues) {
+    if (cue.start > t) break;
+    if (t < cue.end) return cue.start;
+  }
+  return null;
 }

@@ -31,9 +31,9 @@ behind a UI inspired by Juxtopposed's VLC redesign. Windows 10/11 first, Fedora 
 at parity. Public MIT repo, but built for one person's daily use — no telemetry, no onboarding, no
 accounts, no update nags, no network traffic unless a stream is opened.
 
-**Current status:** Phases 1–6 closed on Windows (Linux pending: spike S2 and the render backend need
-the Fedora machine; Phases 3–5 also have a few hands-on checks listed in their notes). Next step is
-**Phase 7** in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). Update this line when a
+**Current status:** Phases 1–7 closed on Windows (Linux pending: spike S2 and the render backend need
+the Fedora machine; Phases 3–5 and 7 also have a few hands-on checks listed in their notes). Next step is
+**Phase 8** in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). Update this line when a
 phase closes.
 
 ## Document map — read the relevant one before touching that area

@@ -460,7 +460,7 @@ Subtitle delay                                   [ −350 ms ] ⟲
 | **Checkbox** | 16 px, radius 3 px, 1 px `--border-strong`; checked `--accent` fill, `--on-accent` check. |
 | **Select** | `--control-md`, `--bg-raised`, chevron right; opens a menu (§8.7). |
 | **Segmented control** | Group in a `--bg-raised` container (radius 4, 2 px padding); selected segment `--bg-active` + `--text-primary`, with a 2 px `--accent` underline. For 2–5 mutually exclusive options (S / M / L / XL, Fit / Fill / Stretch). |
-| **Tabs** (dock) | 36 px row; each tab = mono icon + label (label hides below 340 px dock width). Active: `--text-primary`, `--accent-muted` background, 2 px `--accent` bottom border. Inactive: `--text-secondary`. |
+| **Tabs** (dock) | 36 px row; each tab = mono icon + label (labels hide below 340 px dock width; when the row is too narrow for every label — under 100 px per tab — only the active tab keeps its label). Active: `--text-primary`, `--accent-muted` background, 2 px `--accent` bottom border. Inactive: `--text-secondary`. |
 | **Chip / badge** | 18 px high, radius 4, `text-xs`; neutral `--bg-active`/`--text-secondary`; accent `--accent-muted`/`--accent-text`. |
 | **Key cap** | Mono `text-xs`, `--bg-raised`, 1 px `--border-strong`, radius 4, 2 × 6 px padding. Used in tooltips, menus, hotkey editor. |
 
@@ -604,6 +604,7 @@ STYLE
 | Drag waveform area | Scrubs playback (seek) |
 | Buttons | "Prev/Next cue to now" = `sub_step ∓1` — aligns that cue's start with the current position (the fastest way to sync by ear) |
 | Unknown regions | Diagonal hatch in `--border-subtle` where `coverage != "full"` (§ARCHITECTURE 11.3); bitmap subs show unlabeled blocks |
+| Drawing | Each lane is drawn once into a strip two views wide and moved with a transform in whole device pixels; it is redrawn when the playhead nears its edge, the data changes, or another cue becomes current (ARCHITECTURE D33). Never repaint per frame. |
 
 **Auto-match** opens an inline result card: "Matched 11 of 12 episodes" with a collapsible list
 (video → subtitle, language chip), unmatched/ambiguous rows flagged in `--warning`, and one **Apply** primary button.

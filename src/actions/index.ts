@@ -4,6 +4,7 @@ import { mediaActions } from "./definitions/media";
 import { playbackActions } from "./definitions/playback";
 import { queueActions } from "./definitions/queue";
 import { stubActions } from "./definitions/stubs";
+import { subtitleActions } from "./definitions/subtitles";
 import { trackActions } from "./definitions/tracks";
 import { windowActions } from "./definitions/window";
 import { register } from "./registry";
@@ -17,6 +18,7 @@ export function registerActions(): void {
     ...playbackActions,
     ...queueActions,
     ...trackActions,
+    ...subtitleActions,
     ...mediaActions,
     ...windowActions,
     ...appActions,

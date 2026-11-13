@@ -3,10 +3,12 @@ import type { AbLoop } from "./bindings/AbLoop";
 import type { AppInfo } from "./bindings/AppInfo";
 import type { CacheInfo } from "./bindings/CacheInfo";
 import type { Config } from "./bindings/Config";
+import type { CueWindow } from "./bindings/CueWindow";
 import type { Direction } from "./bindings/Direction";
 import type { EqPreset } from "./bindings/EqPreset";
 import type { EqState } from "./bindings/EqState";
 import type { Margins } from "./bindings/Margins";
+import type { MatchScope } from "./bindings/MatchScope";
 import type { OpenRequest } from "./bindings/OpenRequest";
 import type { PickKind } from "./bindings/PickKind";
 import type { PlayerState } from "./bindings/PlayerState";
@@ -17,6 +19,8 @@ import type { ResolvedKeymap } from "./bindings/ResolvedKeymap";
 import type { SeekRequest } from "./bindings/SeekRequest";
 import type { ShaderEntry } from "./bindings/ShaderEntry";
 import type { SleepRequest } from "./bindings/SleepRequest";
+import type { SubMatchReport } from "./bindings/SubMatchReport";
+import type { SubStylePatch } from "./bindings/SubStylePatch";
 import type { TrackSlot } from "./bindings/TrackSlot";
 import type { UiPatch } from "./bindings/UiPatch";
 import type { UiState } from "./bindings/UiState";
@@ -60,6 +64,10 @@ export const playerMpvCommand = (args: string[]) => invoke<void>("player_mpv_com
 // ── tracks ───────────────────────────────────────────────────────────────────
 export const tracksSelect = (kind: TrackSlot, id: number | null) =>
   invoke<void>("tracks_select", { kind, id });
+/** Adds an external file to the playing media; resolves to the new track id. */
+export const tracksAddExternal = (kind: "audio" | "sub", path: string, select: boolean) =>
+  invoke<number>("tracks_add_external", { kind, path, select });
+export const tracksRemoveExternal = (id: number) => invoke<void>("tracks_remove_external", { id });
 
 // ── audio / subtitles ────────────────────────────────────────────────────────
 export const audioSetDelay = (ms: number) => invoke<void>("audio_set_delay", { ms });
@@ -74,6 +82,16 @@ export const eqPresetSave = (preset: EqPreset) => invoke<void>("eq_preset_save",
 export const eqPresetDelete = (id: string) => invoke<void>("eq_preset_delete", { id });
 export const subSetDelay = (ms: number) => invoke<void>("sub_set_delay", { ms });
 export const subSetVisible = (visible: boolean) => invoke<void>("sub_set_visible", { visible });
+/** Live subtitle style; not saved (defaults live in `subtitles.*`). */
+export const subSetStyle = (patch: SubStylePatch) => invoke<void>("sub_set_style", { patch });
+/** Shifts the delay so the next (1) or previous (−1) line shows now. */
+export const subStep = (direction: 1 | -1) => invoke<void>("sub_step", { direction });
+/** Cues between `from` and `to` seconds, in the file's own time (before the delay). */
+export const subGetCues = (trackId: number, from: number, to: number) =>
+  invoke<CueWindow>("sub_get_cues", { trackId, from, to });
+export const subAutomatch = (scope: MatchScope, apply: boolean) =>
+  invoke<SubMatchReport>("sub_automatch", { scope, apply });
+export const fontsList = () => invoke<string[]>("fonts_list");
 
 // ── queue ────────────────────────────────────────────────────────────────────
 export const queueSnapshot = () => invoke<QueueState>("queue_snapshot");

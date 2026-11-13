@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Cue } from "@/ipc/bindings/Cue";
 import {
+  currentCueStart,
   delayAfterDrag,
   findOnsets,
   layoutCues,
   nearest,
   snapDelay,
+  stripCovers,
+  stripOffset,
+  stripView,
   timeToX,
   type View,
   windowPeaks,
@@ -102,5 +106,39 @@ describe("layoutCues", () => {
     expect(blocks[0]).toMatchObject({ x: 140, width: 40, current: true });
     // With +2 s of delay the same cue starts after the playhead.
     expect(layoutCues([cue(9, 11)], 2000, view)[0]).toMatchObject({ x: 180, current: false });
+  });
+});
+
+describe("strips", () => {
+  it("draws two views wide at the same scale", () => {
+    const strip = stripView(view);
+    expect(strip).toEqual({ position: 10, span: 16, width: 640 });
+    // A time keeps its distance from the strip's centre: 20 px per second.
+    expect(timeToX(strip, 12) - timeToX(strip, 10)).toBe(40);
+  });
+
+  it("shifts so the playhead time sits at the view centre", () => {
+    // Drawn around t = 10: at t = 10 the strip's centre (320) must be at the view centre (160).
+    expect(stripOffset(view, 10, 10)).toBe(-160);
+    // One second later the strip has moved 20 px to the left.
+    expect(stripOffset(view, 10, 11)).toBe(-180);
+    const strip = stripView(view);
+    expect(timeToX(strip, 11) + stripOffset(view, 10, 11)).toBe(160);
+  });
+
+  it("knows when it has to be drawn again", () => {
+    // The strip reaches 16 s each way and the view needs 8: up to 6 s of travel is covered.
+    expect(stripCovers(view, 10, 10)).toBe(true);
+    expect(stripCovers(view, 10, 15.9)).toBe(true);
+    expect(stripCovers(view, 10, 16.1)).toBe(false);
+    expect(stripCovers(view, 10, 3)).toBe(false);
+  });
+
+  it("finds the cue under the playhead with the delay applied", () => {
+    const cues = [cue(1, 3), cue(5, 7)];
+    expect(currentCueStart(cues, 0, 2)).toBe(1);
+    expect(currentCueStart(cues, 0, 4)).toBeNull();
+    expect(currentCueStart(cues, 400, 5.2)).toBeNull();
+    expect(currentCueStart(cues, 400, 5.5)).toBe(5);
   });
 });

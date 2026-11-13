@@ -152,10 +152,11 @@ function SubtitleRows() {
   const tracks = usePlayer((s) => s.tracks) ?? NO_TRACKS;
   const selected = usePlayer((s) => s.selected.sub) ?? null;
   const subs = tracks.filter((t) => t.kind === "sub");
+  const showTab = useUiStore((s) => s.showSidebarTab);
   const select = (id: number | null) => void tracksSelect("sub", id).catch(reportError);
   return (
     <>
-      <Header title="Subtitles" />
+      <Header title="Subtitles" onSettings={() => showTab("subtitles")} />
       <Row selected={selected === null} label="Off" onSelect={() => select(null)} />
       {subs.map((t) => (
         <Row

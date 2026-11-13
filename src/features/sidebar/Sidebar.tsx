@@ -1,9 +1,9 @@
 /**
  * The sidebar (DESIGN_SYSTEM §10): a 36 px tab row, then the active tab's body, which
  * scrolls. Labels hide below 340 px of dock width. The last tab is remembered in the session.
- * Subtitles and Bookmarks join the row in their own phases.
+ * Bookmarks joins the row in its own phase.
  */
-import { AudioLines, SlidersHorizontal, Video, X } from "lucide-react";
+import { AudioLines, Captions, SlidersHorizontal, Video, X } from "lucide-react";
 import { type KeyboardEvent, useRef } from "react";
 import { IconButton } from "@/components/IconButton";
 import { Tooltip } from "@/components/Tooltip";
@@ -11,9 +11,11 @@ import { useShortcut } from "@/stores/keymap";
 import { SIDEBAR_TABS, type SidebarTab, useUiStore } from "@/stores/ui";
 import { AudioTab } from "./AudioTab";
 import { PlaybackTab } from "./PlaybackTab";
+import { SubtitlesTab } from "./SubtitlesTab";
 import { VideoTab } from "./VideoTab";
 
 const TABS: Record<SidebarTab, { label: string; icon: typeof Video; actionId: string }> = {
+  subtitles: { label: "Subtitles", icon: Captions, actionId: "ui.sidebar_subtitles" },
   audio: { label: "Audio", icon: AudioLines, actionId: "ui.sidebar_audio" },
   video: { label: "Video", icon: Video, actionId: "ui.sidebar_video" },
   playback: { label: "Playback", icon: SlidersHorizontal, actionId: "ui.sidebar_playback" },
@@ -35,7 +37,9 @@ function Tab({ tab, active, compact }: { tab: SidebarTab; active: boolean; compa
         tabIndex={active ? 0 : -1}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => show(tab)}
-        className={`flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 border-b-2 px-2 text-base ${
+        className={`flex h-9 min-w-0 items-center justify-center gap-1.5 border-b-2 px-2 text-base ${
+          compact ? "flex-1" : "flex-[2.5]"
+        } ${
           active
             ? "border-accent bg-accent-soft text-fg"
             : "border-transparent text-fg-2 hover:bg-hover hover:text-fg"
@@ -53,7 +57,9 @@ export function Sidebar({ width }: { width: number }) {
   const show = useUiStore((s) => s.showSidebarTab);
   const setDock = useUiStore((s) => s.setDock);
   const row = useRef<HTMLDivElement>(null);
-  const compact = width < 340;
+  // Below 340 px no tab is labelled; when the row is too narrow for every label, only the
+  // active tab keeps its own.
+  const crowded = width < SIDEBAR_TABS.length * 100;
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
@@ -78,7 +84,12 @@ export function Sidebar({ width }: { width: number }) {
           className="flex min-w-0 flex-1"
         >
           {SIDEBAR_TABS.map((t) => (
-            <Tab key={t} tab={t} active={t === tab} compact={compact} />
+            <Tab
+              key={t}
+              tab={t}
+              active={t === tab}
+              compact={width < 340 || (crowded && t !== tab)}
+            />
           ))}
         </div>
         <IconButton
@@ -96,6 +107,7 @@ export function Sidebar({ width }: { width: number }) {
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
         <div className="flex flex-col gap-4 p-3">
+          {tab === "subtitles" && <SubtitlesTab />}
           {tab === "audio" && <AudioTab />}
           {tab === "video" && <VideoTab />}
           {tab === "playback" && <PlaybackTab />}

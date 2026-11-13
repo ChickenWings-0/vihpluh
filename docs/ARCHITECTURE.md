@@ -514,7 +514,7 @@ mpv log messages (`mpv_request_log_messages("warn")`) are forwarded into `tracin
 | `brightness`, `contrast`, `saturation`, `gamma`, `hue`, `video-rotate`, `video-zoom`, `video-pan-x/y`, `video-aspect-override`, `panscan` | `video` |
 | `video-params`, `video-out-params`, `audio-params`, `audio-out-params`, `hwdec-current`, `current-vo`, `current-ao`, `container-fps`, `estimated-vf-fps`, `video-bitrate`, `audio-bitrate`, `frame-drop-count`, `decoder-frame-drop-count`, `display-fps` | `inspector` (emitted only while the inspector is open; `inspector_subscribe(bool)`) |
 | `ab-loop-a`, `ab-loop-b`, `loop-file` | `abLoop`, `loopFile` |
-| `sub-text`, `sub-start`, `sub-end` | fed to the progressive cue index (§11.3), not to `PlayerState` |
+| `sub-start`, `sub-end` (observed), `sub-text` (read when they change) | fed to the progressive cue index (§11.3), not to `PlayerState`. mpv reports these in the file's own time, before `sub-delay`. |
 
 ### 6.4 Playback state machine
 
@@ -715,8 +715,8 @@ interface AppInfo {
 | Command | Request | Returns |
 |---|---|---|
 | `tracks_select` | `{ kind: "video" \| "audio" \| "sub" \| "sub2", id: number \| null }` | `void` |
-| `tracks_add_external` | `{ kind: "audio" \| "sub", path: string, select: boolean }` | `number` (track id) |
-| `tracks_remove_external` | `{ id: number }` | `void` |
+| `tracks_add_external` | `{ kind: "audio" \| "sub", path: string, select: boolean }` | `number` (track id). A subtitle file is saved to `sub_links` (source `manual`) for the playing media. |
+| `tracks_remove_external` | `{ id: number }` | `void` (also removes the file's `sub_links` row) |
 | `audio_set_device` | `{ name: string }` | `void` |
 | `audio_set_delay` | `{ ms: number }` | `void` |
 | `audio_set_eq` | `EqState` | `void` |
@@ -724,10 +724,10 @@ interface AppInfo {
 | `eq_presets_list` / `eq_preset_save` / `eq_preset_delete` | — / `EqPreset` / `{ id }` | `EqPreset[]` / `void` / `void` |
 | `sub_set_delay` | `{ ms: number }` | `void` |
 | `sub_set_visible` | `{ visible: boolean }` | `void` |
-| `sub_set_style` | `Partial<SubStyle>` | `void` |
+| `sub_set_style` | `Partial<SubStyle>` | `void` (live for the session; defaults live in `subtitles.*`) |
 | `sub_step` | `{ direction: 1 \| -1 }` | `void` |
 | `sub_get_cues` | `{ trackId: number, from: number, to: number }` | `{ cues: Cue[], coverage: "full" \| "partial" \| "none", text: boolean }` |
-| `sub_automatch` | `{ scope: "queue" \| "folder", apply: boolean }` | `SubMatchReport` |
+| `sub_automatch` | `{ scope: "queue" \| "folder", apply: boolean }` | `SubMatchReport` (`applied` tells whether the pairs were saved) |
 | `fonts_list` | — | `string[]` (installed families) |
 | `video_set_adjust` | `Partial<VideoAdjust>` (`shaders` = full paths of user shaders) | `void` |
 | `video_reset` | — | `void` |
@@ -808,7 +808,7 @@ interface AppInfo {
 | `cache_info` / `cache_clear` | — | `{ bytes, limitBytes }` / `void` (deletes thumbnails and waveforms, §9.7) |
 | `video_output_transfer` | — | `string \| null` (`video-target-params/gamma`: `"pq"`/`"hlg"` while HDR passes through) |
 | `app_info` | — | `AppInfo` |
-| `app_pick_media` | `{ kind: "files" \| "folder" }` | `string[]` (native open dialog; empty when cancelled) |
+| `app_pick_media` | `{ kind: "files" \| "folder" \| "subtitles" }` | `string[]` (native open dialog; empty when cancelled) |
 | `app_ready` | — | `void` (frontend painted; show window) |
 | `app_reveal` | `{ path: string }` | `void` |
 | `app_open_config_dir` | — | `void` |
@@ -1214,12 +1214,17 @@ One click pairs external subtitle files with the videos in the current folder or
 3. **Score** each (video, sub) pair: exact stem prefix match = 100; same `(season, episode)` = 80 (+10 if
    series keys equal or one contains the other); otherwise token-set similarity of normalised stems × 60.
    Pairs below 50 are discarded.
-4. **Assign:** per video, keep every sub with the top score per language. Ambiguity (two subs, same language,
-   scores within 5) is reported, not guessed.
+4. **Assign:** a subtitle goes to the video(s) it scores highest with; two different episode numbers never
+   pair. Per video, keep the top-scoring sub per language. Ambiguity (two subs, same language, scores
+   within 5) is reported, not guessed; a video left with only ambiguous candidates is listed there and
+   not among the unmatched.
 5. **Report** (`SubMatchReport`): `{ matched: [{video, subs[]}], unmatchedVideos[], unmatchedSubs[], ambiguous[] }`.
    With `apply: true`, rows are written to `sub_links` (source `auto`) and the current file's matches are attached immediately via `sub-add`.
 
-`sub_links` are honoured on every subsequent load of that `media_key`. mpv's own `sub-auto=fuzzy` stays on as a baseline.
+`sub_links` are honoured on every subsequent load of that `media_key`: files mpv did not find itself are
+attached with `sub-add` when the file has loaded, before per-file memory is restored; with
+`subtitles.show_by_default` and no subtitle selected, the first one is shown. mpv's own `sub-auto=fuzzy`
+stays on as a baseline.
 
 ---
 
@@ -1278,10 +1283,12 @@ The subtitle timeline needs cue timings (and text) around the current position. 
 | Source | Coverage | Method |
 |---|---|---|
 | External text subtitles (`srt`, `ass/ssa`, `vtt`) | full | Parsed natively in `cues.rs`. |
-| Embedded text subtitles in MKV (`S_TEXT/UTF8`, `S_TEXT/ASS`) | full | `mkv.rs` reads the track's blocks with the `matroska-demuxer` crate off-thread, using the Cues index where the muxer indexed the subtitle track, else a sequential scan. Cached to `cache/cues/`. |
+| Embedded text subtitles in MKV (`S_TEXT/UTF8`, `S_TEXT/ASS`, `S_TEXT/SSA`, `S_TEXT/WEBVTT`) | full | `mkv.rs` reads the track's blocks with the `matroska-demuxer` crate off-thread in one sequential pass (the crate does not expose the Cues index; 694 MB took 0.35 s on the dev machine). The mpv track id maps to the n-th subtitle track in file order. Tracks with content compression stay progressive. Cached to `cache/cues/`. |
 | Anything else (MP4 text, PGS/VobSub bitmaps, streams) | partial, grows during playback | **Progressive:** record `(sub-start, sub-end, sub-text)` as mpv displays/prefetches cues. Bitmap formats yield timings only (`text: false`). |
 
 `sub_get_cues` returns cues in a time window plus `coverage`; the timeline renders known cues and shades unknown regions.
+The index holds one media file at a time and announces changes (`media://cues`) through a callback set at
+startup, not an `AppHandle` (D32).
 
 ```ts
 interface Cue { start: number; end: number; text: string | null }   // seconds, unshifted (before sub-delay)
@@ -1486,6 +1493,9 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D29 | After live EQ commands the core rewrites the `af` entry when the next file starts | `af-command` changes only the running filter; mpv builds the next file's filter from the option text, which would bring back the old curve. Rewriting at start-file costs no audible rebuild. |
 | D30 | The flip shaders are embedded in the binary and written to `<cache>/shaders/` at startup | mpv loads shaders from files, and the resources folder's location differs between dev, installed, and portable layouts. |
 | D31 | Preview frames are taken from the middle of their bucket, not its start | Bucket starts often sit exactly on keyframes, and a keyframe seek to such a time landed one keyframe early (T3: the 6 s thumbnail showed the 4 s frame). |
+| D32 | Services that tests exercise announce events through a plain callback set in `lib.rs`, not an `AppHandle` (first: the cue index) | A unit test that reaches Tauri's emitter links `TaskDialogIndirect`, and the test binary then fails to load for want of the Common Controls v6 manifest (the D17 failure, now in the unit-test binary). |
+| D33 | The subtitle timeline draws its waveform and cue lanes once into strips two views wide and moves them by whole device pixels, only when that changes | Repainting a canvas every frame, and even writing an unchanged transform every frame, halved the webview's frame rate over video (144 → ~70 fps on the dev machine). Sub-pixel scroll steps show nothing; at ±8 s the lanes move about 25 times a second. |
+| D34 | "Subtitles off" is remembered per file only when the file had a subtitle track to turn off | Otherwise every file once played without subtitles kept a subtitle linked to it later (auto-match, added by hand) from showing. |
 
 ### Open risks (each owned by a Phase 1 spike)
 
