@@ -420,34 +420,42 @@ resolution.
 
 ---
 
-## 10. Phase 8 — Bookmarks, chapters, presets — ☐ not started
+## 10. Phase 8 — Bookmarks, chapters, presets — ☑ closed (Windows, 2026-11-13) — Linux pending
 
 **Goal:** the unified chapter/bookmark timeline and per-show presets that apply themselves.
 
-- [ ] `bookmarks.rs` + commands; `Ctrl+B` quick add with auto label + OSD; toast "Rename".
-- [ ] **Bookmarks tab** (D§10.5): merged chronological list, filter, inline rename, delete with undo, current-position highlight, hover thumbnail.
-- [ ] Seek bar: bookmark ticks, right-click mini menu (add bookmark here, set A/B, copy timestamp); `markers.next/previous` across chapters + bookmarks.
-- [ ] `presets/mod.rs`: TOML load/save/watch of `presets/*.toml` (A§10.1), validation with clear errors, `preset_*` commands.
-- [ ] `presets/matcher.rs`: match types, specificity ordering, priority ties (A§10.4) — table-driven unit tests.
-- [ ] Track rule resolution (A§10.3) — unit tests against synthetic track lists.
-- [ ] Full layered load pipeline (A§6.5 step 2 & 4): defaults → presets → per-file memory → CLI; `appliedPresets`, `presetDirty` computation.
-- [ ] `preset_capture_current` (diff vs defaults, track → rule conversion, default match suggestion).
-- [ ] **Preset strip** (D§10.6): applied preset + modified dot, Update, Save as… popover (name, applies-to, sections), ⋯ menu.
-- [ ] Presets manager sub-page data plumbing (UI shell lands with Settings in Phase 10; for now "Reveal preset file").
-- [ ] `--preset <ID>` CLI flag; `presets.*` actions.
+- [x] `bookmarks.rs` + commands; `Ctrl+B` quick add with auto label + OSD; toast "Rename".
+- [x] **Bookmarks tab** (D§10.5): merged chronological list, filter, inline rename, delete with undo, current-position highlight, hover thumbnail.
+- [x] Seek bar: bookmark ticks, right-click mini menu (add bookmark here, set A/B, copy timestamp); `markers.next/previous` across chapters + bookmarks.
+- [x] `presets/mod.rs`: TOML load/save/watch of `presets/*.toml` (A§10.1), validation with clear errors, `preset_*` commands.
+- [x] `presets/matcher.rs`: match types, specificity ordering, priority ties (A§10.4) — table-driven unit tests.
+- [x] Track rule resolution (A§10.3) — unit tests against synthetic track lists. *(`presets/rules.rs`.)*
+- [x] Full layered load pipeline (A§6.5 step 2 & 4): defaults → presets → per-file memory → CLI; `appliedPresets`, `presetDirty` computation. *(`player/presets.rs`.)*
+- [x] `preset_capture_current` (diff vs defaults, track → rule conversion, default match suggestion). *(The suggestion is made by the Save-as form from `media.series`.)*
+- [x] **Preset strip** (D§10.6): applied preset + modified dot, Update, Save as… popover (name, applies-to, sections), ⋯ menu.
+- [x] Presets manager sub-page data plumbing (UI shell lands with Settings in Phase 10; for now "Reveal preset file"). *(`preset_list/get/save/delete/matches_for`, `presets://changed`; "Manage presets…" is shown disabled until then. Reveal opens the file manager, so it was not exercised.)*
+- [x] `--preset <ID>` CLI flag; `presets.*` actions.
 
 ### Verification
 
-- [ ] `Ctrl+B` during playback adds a bookmark without opening anything; it appears on the seek bar and in the tab; persists across restart and after renaming/moving the file (same `media_key`).
-- [ ] T1's chapters and user bookmarks interleave correctly; `PageDown`/`PageUp` step through both.
-- [ ] On T6 episode 1: set subtitle delay −350 ms, pick the English "Full" track, raise contrast, save as a **series** preset → episode 2 (via Next) loads with all of it applied automatically, including the right tracks even though track order differs (craft one episode with reordered tracks).
-- [ ] A **folder** preset overrides a **series** preset key-by-key; keys it doesn't set fall through (verify with two presets and the inspector).
-- [ ] Changing a value shows the modified dot; Update writes only that change to the TOML (diff the file); hand-editing the TOML while running re-applies live.
-- [ ] A malformed preset file produces one toast naming the file and line and is skipped; other presets still load.
-- [ ] `playback.presets_enabled = false` disables auto-application; `--preset` forces one.
-- [ ] Matcher, track-rule, and capture unit tests green.
+- [x] `Ctrl+B` during playback adds a bookmark without opening anything; it appears on the seek bar and in the tab; persists across restart and after renaming/moving the file (same `media_key`). *(The dock stayed closed, one tick appeared, the toast read "Bookmark added at 0:20 · Rename". T1's three bookmarks were there after a restart; a bookmark set on T3 showed on a renamed copy in another folder.)*
+- [x] T1's chapters and user bookmarks interleave correctly; `PageDown`/`PageUp` step through both. *(Six chapters and bookmarks at 0:20 and 0:50 listed in time order with the playhead's row marked; from 0:50, PageDown went to 1:00 and 1:15, PageUp back to 1:00, 0:50, 0:45.)*
+- [x] On T6 episode 1: set subtitle delay −350 ms, pick the English "Full" track, raise contrast, save as a **series** preset → episode 2 (via Next) loads with all of it applied automatically, including the right tracks even though track order differs (craft one episode with reordered tracks). *(On a two-episode series made for this, with audio and subtitle tracks in opposite orders: Japanese audio (track 1, then 2), Spanish subtitles (track 3, then 1), −350 ms, contrast 4, saved through Ctrl+S and the form (which suggested the series). Episode 2 loaded with all four and no "modified" mark. A second capture with "Full" chosen wrote `title_contains = "full"`.)*
+- [x] A **folder** preset overrides a **series** preset key-by-key; keys it doesn't set fall through (verify with two presets and the inspector). *(Folder preset with contrast 10 and saturation 5 over the series preset: contrast 10, saturation 5, delay still −350; applied order `demo`, `demo-folder`. Read from the mirrored state rather than the inspector.)*
+- [x] Changing a value shows the modified dot; Update writes only that change to the TOML (diff the file); hand-editing the TOML while running re-applies live. *(Contrast 12 → "modified" and an Update button; after Update the only changed line was `contrast = 12.0     # stronger here`, comment kept. Editing saturation to 8 in the file reached mpv within the watcher's debounce.)*
+- [x] A malformed preset file produces one toast naming the file and line and is skipped; other presets still load. *("Preset skipped — presets/broken.toml, line 5: string values must be quoted…"; the other two stayed applied.)*
+- [x] `playback.presets_enabled = false` disables auto-application; `--preset` forces one. *(Off: nothing applied and delay, contrast, saturation back at their defaults; on again: all back. `--preset demo-folder` on T3, which the preset does not match, applied it.)*
+- [x] Matcher, track-rule, and capture unit tests green.
 
 **Platforms:** W + L-Wayland.
+
+**Phase 8 notes (2026-11-13, Windows only).** Driven through the webview's DevTools channel in
+the quiet, muted test build. Fixed along the way: a new preset file listed its keys
+alphabetically (now in the documented order, track rules inline); the default subtitle font was
+captured into every preset (mpv reports `sans-serif` where the setting is empty); Update added
+`enabled` and `priority` lines to a hand-written file that had left them out. Presets apply before
+per-file memory, as A§10.4 orders them: an episode already watched keeps the tracks and delays it
+was last left with, and shows "modified" when those differ from the preset.
 
 ---
 
@@ -591,7 +599,7 @@ Fill in as phases close (✓ works · ◐ works with documented limitation · �
 | Seek thumbnails | | | |
 | Waveform | | | |
 | Subtitle timeline + auto-match | ✓ | | |
-| Presets | | | |
+| Presets | ✓ | | |
 | Library + watch folders | | | |
 | IPTV / network streams | | | |
 | Settings + hotkey editor | | | |

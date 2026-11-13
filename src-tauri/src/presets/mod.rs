@@ -570,7 +570,18 @@ impl PresetStore {
         let mut doc = std::fs::read_to_string(&path)
             .ok()
             .and_then(|text| text.parse::<toml_edit::DocumentMut>().ok())
-            .unwrap_or_default();
+            .unwrap_or_else(|| fresh_document(preset));
+        // Header keys a hand-written file left out stay out while they hold their defaults.
+        let mut wanted = wanted;
+        for (key, default) in [
+            ("schema", toml::Value::Integer(i64::from(SCHEMA_VERSION))),
+            ("enabled", toml::Value::Boolean(true)),
+            ("priority", toml::Value::Integer(0)),
+        ] {
+            if !doc.contains_key(key) && wanted.get(key) == Some(&default) {
+                wanted.remove(key);
+            }
+        }
         sync_table(doc.as_table_mut(), &wanted);
         let text = doc.to_string();
         // What is on disk must load again as the same preset.
@@ -649,6 +660,30 @@ fn to_edit(value: &toml::Value) -> toml_edit::Value {
             toml_edit::Value::InlineTable(inline)
         }
     }
+}
+
+/// The document for a preset that has no file yet: keys in the order the schema lists them
+/// (§10.1), track rules inline.
+fn fresh_document(preset: &Preset) -> toml_edit::DocumentMut {
+    let mut doc = toml::to_string(preset)
+        .ok()
+        .and_then(|text| text.parse::<toml_edit::DocumentMut>().ok())
+        .unwrap_or_default();
+    for section in ["audio", "subtitles"] {
+        let Some(table) = doc.get_mut(section).and_then(toml_edit::Item::as_table_mut) else {
+            continue;
+        };
+        if let Some(rule) = table.remove("track") {
+            let inline = match rule {
+                toml_edit::Item::Table(rule) => {
+                    toml_edit::Item::Value(toml_edit::Value::InlineTable(rule.into_inline_table()))
+                }
+                other => other,
+            };
+            table.insert("track", inline);
+        }
+    }
+    doc
 }
 
 /// The plain value of a document item, for comparing with what should be there.
@@ -867,6 +902,33 @@ speed = 1.0
     }
 
     #[test]
+    fn header_defaults_a_file_left_out_are_not_added() {
+        let dir = temp_dir("sparse");
+        let text = "id = \"films\"
+name = \"Films\"  # mine
+
+[match]
+type = \"folder\"
+path = \"D:/Films\"
+
+[video]
+contrast = 10
+";
+        std::fs::write(dir.join("films.toml"), text).unwrap();
+        let store = PresetStore::open(dir.clone());
+        let mut preset = store.get("films").unwrap();
+        preset.layer.video.contrast = Some(12.0);
+        store.save(&preset).unwrap();
+        let saved = std::fs::read_to_string(dir.join("films.toml")).unwrap();
+        assert_eq!(saved, text.replace("contrast = 10", "contrast = 12.0"));
+        // Once one of them stops being the default it is written.
+        preset.enabled = false;
+        store.save(&preset).unwrap();
+        let saved = std::fs::read_to_string(dir.join("films.toml")).unwrap();
+        assert!(saved.contains("enabled = false") && !saved.contains("priority"), "{saved}");
+    }
+
+    #[test]
     fn new_presets_get_a_file_and_a_free_id() {
         let dir = temp_dir("new");
         let store = PresetStore::open(dir.clone());
@@ -882,6 +944,13 @@ speed = 1.0
             text.contains("[subtitles.style]") && text.contains("track = { lang = ["),
             "{text}"
         );
+        // A new file follows the documented order: header keys, [match], then the sections.
+        let order: Vec<usize> =
+            ["schema =", "id =", "name =", "[match]", "[audio]", "[subtitles]", "[video]"]
+                .iter()
+                .map(|needle| text.find(needle).unwrap_or_else(|| panic!("no {needle}: {text}")))
+                .collect();
+        assert!(order.windows(2).all(|pair| pair[0] < pair[1]), "{text}");
         store.delete("frieren").unwrap();
         assert!(store.list().is_empty());
         assert!(store.delete("frieren").is_err());

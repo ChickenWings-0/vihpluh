@@ -1,5 +1,6 @@
 /** Registers every action once, at startup. */
 import { appActions } from "./definitions/app";
+import { markerActions } from "./definitions/markers";
 import { mediaActions } from "./definitions/media";
 import { playbackActions } from "./definitions/playback";
 import { queueActions } from "./definitions/queue";
@@ -19,6 +20,7 @@ export function registerActions(): void {
     ...queueActions,
     ...trackActions,
     ...subtitleActions,
+    ...markerActions,
     ...mediaActions,
     ...windowActions,
     ...appActions,

@@ -1,4 +1,5 @@
 /** Typed subscriptions to core events (ARCHITECTURE §7.4). */
+import type { BookmarksChanged } from "./bindings/BookmarksChanged";
 import type { ConfigChanged } from "./bindings/ConfigChanged";
 import type { CuesEvent } from "./bindings/CuesEvent";
 import type { DebugStats } from "./bindings/DebugStats";
@@ -45,6 +46,12 @@ export const onWindowState = (handler: (state: WindowState) => void): Unlisten =
 
 export const onInspector = (handler: (stats: InspectorStats) => void): Unlisten =>
   listen<InspectorStats>("player://inspector", handler);
+
+export const onBookmarksChanged = (handler: (event: BookmarksChanged) => void): Unlisten =>
+  listen<BookmarksChanged>("bookmarks://changed", handler);
+
+export const onPresetsChanged = (handler: () => void): Unlisten =>
+  listen<null>("presets://changed", handler);
 
 export const onCues = (handler: (event: CuesEvent) => void): Unlisten =>
   listen<CuesEvent>("media://cues", handler);

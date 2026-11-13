@@ -1,6 +1,7 @@
 /** Typed wrapper per core command (ARCHITECTURE §7.3). Components never call `invoke` directly. */
 import type { AbLoop } from "./bindings/AbLoop";
 import type { AppInfo } from "./bindings/AppInfo";
+import type { Bookmark } from "./bindings/Bookmark";
 import type { CacheInfo } from "./bindings/CacheInfo";
 import type { Config } from "./bindings/Config";
 import type { CueWindow } from "./bindings/CueWindow";
@@ -12,6 +13,10 @@ import type { MatchScope } from "./bindings/MatchScope";
 import type { OpenRequest } from "./bindings/OpenRequest";
 import type { PickKind } from "./bindings/PickKind";
 import type { PlayerState } from "./bindings/PlayerState";
+import type { Preset } from "./bindings/Preset";
+import type { PresetHit } from "./bindings/PresetHit";
+import type { PresetMatch } from "./bindings/PresetMatch";
+import type { PresetSummary } from "./bindings/PresetSummary";
 import type { QueueState } from "./bindings/QueueState";
 import type { RecentEntry } from "./bindings/RecentEntry";
 import type { Repeat } from "./bindings/Repeat";
@@ -92,6 +97,33 @@ export const subGetCues = (trackId: number, from: number, to: number) =>
 export const subAutomatch = (scope: MatchScope, apply: boolean) =>
   invoke<SubMatchReport>("sub_automatch", { scope, apply });
 export const fontsList = () => invoke<string[]>("fonts_list");
+
+// ── bookmarks / presets ──────────────────────────────────────────────────────
+export const bookmarkList = (mediaKey: string) => invoke<Bookmark[]>("bookmark_list", { mediaKey });
+/** Defaults: the current position and the next "Bookmark N" label. */
+export const bookmarkAdd = (position?: number, label?: string) =>
+  invoke<Bookmark>("bookmark_add", { position: position ?? null, label: label ?? null });
+export const bookmarkUpdate = (id: number, patch: { label?: string; position?: number }) =>
+  invoke<void>("bookmark_update", {
+    id,
+    label: patch.label ?? null,
+    position: patch.position ?? null,
+  });
+export const bookmarkRemove = (id: number) => invoke<void>("bookmark_remove", { id });
+export const presetList = () => invoke<PresetSummary[]>("preset_list");
+export const presetGet = (id: string) => invoke<Preset>("preset_get", { id });
+export const presetSave = (preset: Preset) => invoke<void>("preset_save", { preset });
+export const presetDelete = (id: string) => invoke<void>("preset_delete", { id });
+/** Builds (does not save) a preset from the live values that differ from the defaults. */
+export const presetCaptureCurrent = (name: string, match: PresetMatch, sections: string[]) =>
+  invoke<Preset>("preset_capture_current", { name, match, sections });
+/** Writes the live differences into the most specific applied preset; resolves to its id. */
+export const presetUpdateCurrent = () => invoke<string>("preset_update_current");
+export const presetApply = (id: string) => invoke<void>("preset_apply", { id });
+export const presetDetach = () => invoke<void>("preset_detach");
+export const presetMatchesFor = (source: string) =>
+  invoke<PresetHit[]>("preset_matches_for", { source });
+export const presetReveal = (id: string) => invoke<void>("preset_reveal", { id });
 
 // ── queue ────────────────────────────────────────────────────────────────────
 export const queueSnapshot = () => invoke<QueueState>("queue_snapshot");

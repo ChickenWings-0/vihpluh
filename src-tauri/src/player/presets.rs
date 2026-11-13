@@ -189,6 +189,10 @@ pub fn defaults_layer(config: &Config) -> Layer {
     let mut mirror = super::state::Mirror::new(config);
     mirror.state.eq.enabled = config.audio.equalizer_enabled;
     mirror.state.eq.preset = Some(config.audio.equalizer_preset.clone());
+    // No configured font means mpv's own default, which is what the live state reports.
+    if mirror.state.sub_style.font.is_empty() {
+        mirror.state.sub_style.font = "sans-serif".to_string();
+    }
     Layer::from_flat(
         &live_flat(&mirror.state)
             .into_iter()
@@ -527,8 +531,11 @@ mod tests {
     use crate::presets::MatchType;
     use crate::presets::rules::SubTrackRule;
 
+    /// A fresh state as mpv reports it (it fills in its default subtitle font).
     fn state() -> PlayerState {
-        Mirror::new(&crate::config::defaults()).state
+        let mut state = Mirror::new(&crate::config::defaults()).state;
+        state.sub_style.font = "sans-serif".into();
+        state
     }
 
     fn track(id: i64, kind: TrackKind, lang: &str, title: &str) -> Track {
@@ -573,8 +580,12 @@ mod tests {
         let defaults = defaults_layer(&config).flat();
         let live = live_flat(&state());
         for (key, value) in &defaults {
-            assert!(same(&live[key], value), "{key}: {} vs {value}", live[key]);
+            // The mirror starts with the configured (empty) font until mpv reports its own.
+            if key != "subtitles.style.font" {
+                assert!(same(&live[key], value), "{key}: {} vs {value}", live[key]);
+            }
         }
+        assert_eq!(defaults["subtitles.style.font"], json!("sans-serif"), "mpv's default font");
         assert_eq!(live[SUB_TRACK], json!("off"));
         assert!(!defaults.contains_key(SUB_TRACK) && !defaults.contains_key(AUDIO_TRACK));
     }

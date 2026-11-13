@@ -712,6 +712,7 @@ One chronological list mixing **chapters** (from the file) and **bookmarks** (yo
   name, applies-to (`This series: "sousou no frieren"` / `This folder` / `This folder and subfolders` / `Custom pattern`),
   and four checkboxes for which sections to include (Audio, Subtitles, Video, Playback). One primary **Save**.
 - **⋯**: Detach for this file · Manage presets… (opens Settings → Playback → Presets) · Reveal preset file.
+- When several presets apply, the strip names the most specific one and shows `+N` for the others (their ids in a tooltip, in the order applied).
 
 ### 10.7 Queue panel
 

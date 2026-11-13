@@ -764,7 +764,10 @@ interface AppInfo {
 | `preset_delete` | `{ id: string }` | `void` |
 | `preset_capture_current` | `{ name: string, match: PresetMatch, sections: ("audio" \| "subtitles" \| "video" \| "playback")[] }` | `Preset` |
 | `preset_apply` | `{ id: string }` | `void` |
-| `preset_matches_for` | `{ source: string }` | `{ id: string, reason: string }[]` |
+| `preset_matches_for` | `{ source: string }` | `{ id: string, reason: string }[]` (in the order they are applied) |
+| `preset_update_current` | — | `string` (id) — writes the live differences into the most specific applied preset |
+| `preset_detach` | — | `void` — "Detach for this file": live values stay, nothing is tracked until the next file |
+| `preset_reveal` | `{ id: string }` | `void` — shows the preset's file in the file manager |
 
 **library / playlists / streams**
 
@@ -830,6 +833,8 @@ Window dragging and resize-edge dragging use Tauri's window API directly via `tr
 | `osd://show` | `{ kind: "info" \| "warn" \| "error", text: string, icon?: string, value?: number, action?: { label: string, actionId: string, args? }, group?: string }` | Core-originated notices (resume, hwdec fallback, errors) |
 | `media://waveform` | `{ mediaKey, trackId, status, progress: number }` | Job progress, 4 Hz |
 | `media://cues` | `{ mediaKey, trackId, coverage }` | Cue index grew/finished |
+| `bookmarks://changed` | `{ mediaKey }` | A bookmark of that media was added, edited, or removed (`bookmark_list` again) |
+| `presets://changed` | — | The presets folder changed: a save, or an edit in another program (`preset_list` again) |
 | `library://scan` | `{ folderId, scanned: number, total: number \| null, done: boolean }` | 4 Hz during scans |
 | `app://open` | `{ sources: string[], mode }` | Second instance / file association forwarded argv (informational; core already acted) |
 
@@ -1199,6 +1204,20 @@ URLs match only `glob` presets (against the URL string).
 **While playing:** changes are live-only until the user chooses *Save to preset* / *Update preset*; the
 sidebar shows a "modified" dot (`presetDirty`) when live values differ from what the applied presets produced.
 
+**How the core applies them** (`player/presets.rs`). Every preset-able setting has a dotted key
+(`subtitles.style.size`, `video.contrast`, `audio.track`, …); a preset, a stack of presets, and the live
+state are all flat maps over those keys (D35). On `file-loaded`: the matching presets are layered; every key
+the previous file's presets set and these do not goes back to its configured default; the layer is written
+to mpv (track rules resolved against the real `track-list`); and the values that should result are kept as
+the baseline. `presetDirty` is "some live value differs from that baseline", checked once the writes have
+echoed back. A change to the presets folder re-runs this for the loaded file. A preset's `audio.normalize`
+overrides the setting without writing it; using the switch afterwards wins again.
+
+**Update** (`preset_update_current`) writes the keys whose live value differs from the baseline into the
+most specific applied preset — tracks as rules, nothing else touched — and makes the live values the new
+baseline. Saving edits the existing file in place (comments, order, and unchanged keys stay; header keys a
+hand-written file left out are not added while they hold their defaults); a new file gets the key order of §10.1.
+
 **Capture** (`preset_capture_current`): builds a preset from the *difference* between current live values
 and config defaults, limited to the chosen sections; selected tracks are converted into `TrackRule`s
 (lang + a distinctive title substring). Default match suggestion: `series` if the file parsed to a series key with an episode, else `folder`.
@@ -1496,6 +1515,8 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D32 | Services that tests exercise announce events through a plain callback set in `lib.rs`, not an `AppHandle` (first: the cue index) | A unit test that reaches Tauri's emitter links `TaskDialogIndirect`, and the test binary then fails to load for want of the Common Controls v6 manifest (the D17 failure, now in the unit-test binary). |
 | D33 | The subtitle timeline draws its waveform and cue lanes once into strips two views wide and moves them by whole device pixels, only when that changes | Repainting a canvas every frame, and even writing an unchanged transform every frame, halved the webview's frame rate over video (144 → ~70 fps on the dev machine). Sub-pixel scroll steps show nothing; at ±8 s the lanes move about 25 times a second. |
 | D34 | "Subtitles off" is remembered per file only when the file had a subtitle track to turn off | Otherwise every file once played without subtitles kept a subtitle linked to it later (auto-match, added by hand) from showing. |
+| D35 | Presets are handled as flat maps from dotted key to value; applying a new file's presets first puts back the defaults for keys only the previous file's presets set | One mechanism covers layering, the "modified" comparison, Update, and Capture for every setting; and without the reset a preset's contrast or delay would leak into the next, unrelated file, because mpv keeps property values across files. |
+| D36 | Preset files are read through a struct with the four sections as plain fields, not `serde(flatten)` | Through a flattened struct the TOML parser loses the position of an error, and the toast must name the line. |
 
 ### Open risks (each owned by a Phase 1 spike)
 

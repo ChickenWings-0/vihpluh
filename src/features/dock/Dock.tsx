@@ -63,6 +63,7 @@ export function Dock() {
   const reduceMotion = useConfig((c) => c.interface.reduce_motion) === "on";
   const setDockDragWidth = useUiStore((s) => s.setDockDragWidth);
   const setKeyContext = useUiStore((s) => s.setKeyContext);
+  const sidebarTab = useUiStore((s) => s.sidebarTab);
   const dragging = useRef(false);
 
   // The picture moves aside only in dock mode.
@@ -102,7 +103,11 @@ export function Dock() {
   return (
     <aside
       aria-label={dock === "queue" ? "Queue" : "Sidebar"}
-      onFocus={() => setKeyContext(dock === "queue" ? "queue" : "global")}
+      onFocus={() =>
+        setKeyContext(
+          dock === "queue" ? "queue" : sidebarTab === "bookmarks" ? "bookmarks" : "global",
+        )
+      }
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setKeyContext("global");
       }}

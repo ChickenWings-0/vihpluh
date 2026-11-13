@@ -13,8 +13,8 @@ export type DropHint = "replace" | "enqueue" | null;
 /** The right dock hosts one panel at a time (DESIGN_SYSTEM §6.1). */
 export type DockPanel = "queue" | "sidebar" | null;
 
-/** Sidebar tabs available so far (Bookmarks arrives in Phase 8). */
-export const SIDEBAR_TABS = ["subtitles", "audio", "video", "playback"] as const;
+/** Sidebar tabs, in tab-row order (DESIGN_SYSTEM §10). */
+export const SIDEBAR_TABS = ["subtitles", "audio", "video", "playback", "bookmarks"] as const;
 export type SidebarTab = (typeof SIDEBAR_TABS)[number];
 const asTab = (tab: string): SidebarTab =>
   (SIDEBAR_TABS as readonly string[]).includes(tab) ? (tab as SidebarTab) : "subtitles";

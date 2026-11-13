@@ -23,10 +23,12 @@ import {
   onWindowState,
 } from "@/ipc/events";
 import { useAppStore } from "./app";
+import { startBookmarkSync } from "./bookmarks";
 import { useConfigStore } from "./config";
 import { useKeymapStore } from "./keymap";
 import { reportError, useOsdStore } from "./osd";
 import { usePlayerStore } from "./player";
+import { startPresetSync } from "./presets";
 import { useQueueStore } from "./queue";
 import { receiveTime, resetTime, setClock } from "./time";
 import { setUiPersister, useUiStore } from "./ui";
@@ -96,6 +98,8 @@ export function startSync(): () => void {
     setClock(state.status === "playing", state.speed * forward);
   });
 
+  const stopBookmarks = startBookmarkSync();
+  const stopPresets = startPresetSync();
   setUiPersister((patch) => void sessionUiSet(patch).catch(reportError));
   refetch();
   queueSnapshot()
@@ -120,5 +124,7 @@ export function startSync(): () => void {
   return () => {
     for (const unlisten of unlisteners) unlisten();
     unsubscribeClock();
+    stopBookmarks();
+    stopPresets();
   };
 }

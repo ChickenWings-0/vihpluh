@@ -15,6 +15,7 @@
  */
 import {
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
   type RefObject,
   useEffect,
@@ -22,11 +23,14 @@ import {
   useState,
   type WheelEvent,
 } from "react";
-import { playerSeek } from "@/ipc/commands";
+import { dispatch } from "@/actions";
+import { DropdownMenu, MenuContent, type MenuEntry, separator } from "@/components/Menu";
+import { playerSeek, playerSetAbLoop } from "@/ipc/commands";
 import { thumbUrl } from "@/ipc/transport";
-import { formatTime } from "@/lib/time";
+import { formatTime, formatTimePrecise } from "@/lib/time";
 import { useAnimationFrame } from "@/lib/useAnimationFrame";
 import { binPeaks, loudest, type Waveform } from "@/lib/waveform";
+import { useBookmarkStore } from "@/stores/bookmarks";
 import { useConfig } from "@/stores/config";
 import { reportError } from "@/stores/osd";
 import { usePlayer } from "@/stores/player";
@@ -136,7 +140,10 @@ export function SeekBar() {
   const dragTo = useRef<number | null>(null);
   const lastDragSeek = useRef(0);
   const [active, setActive] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; time: number } | null>(null);
   const hold = useUiStore((s) => s.hold);
+  const bookmarks = useBookmarkStore((s) => s.bookmarks);
+  const abLoop = usePlayer((s) => s.abLoop);
 
   const hasMedia = usePlayer((s) => s.media !== null) ?? false;
   const mediaKey = usePlayer((s) => s.media?.key ?? "") ?? "";
@@ -306,6 +313,42 @@ export function SeekBar() {
     void playerSeek(req).catch(reportError);
   };
 
+  // Right-click: a small menu for the time under the pointer (DESIGN_SYSTEM §8.8).
+  const onContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!hasMedia) return;
+    setMenu({ x: e.clientX, y: e.clientY, time: timeAt(e.clientX) });
+    hold("seek-menu", true);
+  };
+  const closeMenu = () => {
+    setMenu(null);
+    hold("seek-menu", false);
+  };
+  const setLoopPoint = (point: "a" | "b", time: number) =>
+    void playerSetAbLoop({ a: abLoop?.a ?? null, b: abLoop?.b ?? null, [point]: time }).catch(
+      reportError,
+    );
+  const menuEntries = (time: number): MenuEntry[] => [
+    { kind: "label", label: formatTimePrecise(time) },
+    {
+      kind: "item",
+      label: "Add bookmark here",
+      disabled: mediaKey === "",
+      onSelect: () => void dispatch("bookmarks.add", { trigger: "menu", args: { seconds: time } }),
+    },
+    separator,
+    { kind: "item", label: "Set loop start (A) here", onSelect: () => setLoopPoint("a", time) },
+    { kind: "item", label: "Set loop end (B) here", onSelect: () => setLoopPoint("b", time) },
+    separator,
+    {
+      kind: "item",
+      label: "Copy timestamp",
+      onSelect: () =>
+        void navigator.clipboard.writeText(formatTimePrecise(time)).catch(reportError),
+    },
+  ];
+
   const dur = getDuration();
   const thick = waveMode ? "h-7" : active ? "h-3" : "h-2";
 
@@ -332,6 +375,7 @@ export function SeekBar() {
       onPointerUp={onPointerUp}
       onLostPointerCapture={onLostPointerCapture}
       onWheel={onWheel}
+      onContextMenu={onContextMenu}
       onKeyDown={onKeyDown}
       onFocus={(e) => setActive(e.currentTarget.matches(":focus-visible"))}
       onBlur={() => setActive(false)}
@@ -364,6 +408,15 @@ export function SeekBar() {
                 style={{ left: `${(c.time / dur) * 100}%` }}
               />
             ))}
+        {dur > 0 &&
+          bookmarks.map((b) => (
+            <div
+              key={b.id}
+              data-bookmark-tick
+              className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-fg"
+              style={{ left: `${Math.min(100, (b.position / dur) * 100)}%` }}
+            />
+          ))}
         {waveformOn && progress !== null && (
           <div
             role="progressbar"
@@ -401,6 +454,24 @@ export function SeekBar() {
         <div ref={chapterLine} className="hidden max-w-60 truncate px-1 text-fg-2 text-sm" />
         <div ref={timeLine} className="tabular px-1 text-base text-fg" />
       </div>
+      {menu && (
+        <DropdownMenu.Root
+          open
+          modal={false}
+          onOpenChange={(open) => {
+            if (!open) closeMenu();
+          }}
+        >
+          <DropdownMenu.Trigger asChild>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none fixed h-0 w-0"
+              style={{ left: menu.x, top: menu.y }}
+            />
+          </DropdownMenu.Trigger>
+          <MenuContent entries={menuEntries(menu.time)} side="top" align="start" />
+        </DropdownMenu.Root>
+      )}
     </div>
   );
 }

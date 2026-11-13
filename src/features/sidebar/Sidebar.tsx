@@ -1,16 +1,18 @@
 /**
  * The sidebar (DESIGN_SYSTEM §10): a 36 px tab row, then the active tab's body, which
  * scrolls. Labels hide below 340 px of dock width. The last tab is remembered in the session.
- * Bookmarks joins the row in its own phase.
+ * A preset strip sits under every tab (§10.6).
  */
-import { AudioLines, Captions, SlidersHorizontal, Video, X } from "lucide-react";
+import { AudioLines, Bookmark, Captions, SlidersHorizontal, Video, X } from "lucide-react";
 import { type KeyboardEvent, useRef } from "react";
 import { IconButton } from "@/components/IconButton";
 import { Tooltip } from "@/components/Tooltip";
 import { useShortcut } from "@/stores/keymap";
 import { SIDEBAR_TABS, type SidebarTab, useUiStore } from "@/stores/ui";
 import { AudioTab } from "./AudioTab";
+import { BookmarksTab } from "./BookmarksTab";
 import { PlaybackTab } from "./PlaybackTab";
+import { PresetStrip } from "./PresetStrip";
 import { SubtitlesTab } from "./SubtitlesTab";
 import { VideoTab } from "./VideoTab";
 
@@ -19,6 +21,7 @@ const TABS: Record<SidebarTab, { label: string; icon: typeof Video; actionId: st
   audio: { label: "Audio", icon: AudioLines, actionId: "ui.sidebar_audio" },
   video: { label: "Video", icon: Video, actionId: "ui.sidebar_video" },
   playback: { label: "Playback", icon: SlidersHorizontal, actionId: "ui.sidebar_playback" },
+  bookmarks: { label: "Bookmarks", icon: Bookmark, actionId: "ui.sidebar_bookmarks" },
 };
 
 function Tab({ tab, active, compact }: { tab: SidebarTab; active: boolean; compact: boolean }) {
@@ -111,8 +114,10 @@ export function Sidebar({ width }: { width: number }) {
           {tab === "audio" && <AudioTab />}
           {tab === "video" && <VideoTab />}
           {tab === "playback" && <PlaybackTab />}
+          {tab === "bookmarks" && <BookmarksTab />}
         </div>
       </div>
+      <PresetStrip />
     </div>
   );
 }
