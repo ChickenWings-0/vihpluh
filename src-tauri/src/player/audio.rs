@@ -116,7 +116,8 @@ impl Core {
     }
 
     pub(super) fn sync_normalize(&mut self) {
-        let wanted = self.config.audio.normalize;
+        // A preset may ask for it either way without touching the setting.
+        let wanted = self.preset.normalize.unwrap_or(self.config.audio.normalize);
         if wanted != self.filters.norm {
             if wanted {
                 self.run_command(&["af", "add", NORM_ENTRY]);
@@ -135,6 +136,8 @@ impl Core {
     /// made through the UI already matches the live state, so nothing happens twice).
     pub(super) fn audio_config_changed(&mut self, old: &Config) {
         if old.audio.normalize != self.config.audio.normalize {
+            // The switch was used: it wins over a preset's choice from here on.
+            self.preset.normalize = None;
             self.sync_normalize();
         }
         let (a, b) = (&old.audio, &self.config.audio);

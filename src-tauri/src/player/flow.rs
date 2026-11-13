@@ -33,6 +33,8 @@ pub(crate) struct LoadOpts {
     pub start: Option<String>,
     pub paused: Option<bool>,
     pub no_resume: bool,
+    /// `--preset` / `presetId`: applied on top of whatever matches.
+    pub preset: Option<String>,
 }
 
 /// A load waiting for its history lookup.
@@ -96,6 +98,7 @@ impl Core {
             start: start.or_else(|| request.start_at.map(|s| format!("{s}"))),
             paused: request.paused,
             no_resume: request.no_resume.unwrap_or(false),
+            preset: request.preset_id.clone(),
         };
         let users = || request.sources.iter().map(NewItem::user).collect::<Vec<_>>();
         let decision = match request.mode {
@@ -196,6 +199,7 @@ impl Core {
         self.save_progress();
         self.generation += 1;
         self.current = None;
+        self.presets_begin_load(opts.preset.clone());
         if !item.is_url && !Path::new(&item.source).is_file() {
             let effects = self.mirror.fail("file not found");
             self.apply_failure(effects);
@@ -323,6 +327,8 @@ impl Core {
 
         // Before per-file memory, so a remembered external track is there to be chosen.
         self.attach_sub_links(&current.sub_links);
+        // Layered settings (§6.5 step 2): presets first, per-file memory over them.
+        self.apply_presets();
         if self.config.playback.remember_per_file {
             if let Some(entry) = &current.history {
                 self.restore_memory(entry);
@@ -488,6 +494,7 @@ impl Core {
         self.tick_audio(now);
         self.tick_sleep(now);
         self.tick_inspector(now);
+        self.tick_presets(now);
         if self.mirror.state.status == Status::Playing
             && now.duration_since(self.last_position_save) >= POSITION_SAVE_EVERY
         {
@@ -550,7 +557,7 @@ impl Core {
         }
         if let Some(item) = self.queue.current().cloned() {
             let start = (saved.position > 0.0).then(|| format!("{}", saved.position));
-            self.load(item, LoadOpts { start, paused: Some(true), no_resume: true });
+            self.load(item, LoadOpts { start, paused: Some(true), no_resume: true, preset: None });
         }
     }
 }

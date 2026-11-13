@@ -5,6 +5,7 @@
 
 pub mod app;
 pub mod audio;
+pub mod bookmark;
 pub mod config;
 #[cfg(debug_assertions)]
 pub mod debug;
@@ -12,6 +13,7 @@ pub mod keybinds;
 pub mod library;
 pub mod media;
 pub mod player;
+pub mod preset;
 pub mod queue;
 pub mod session;
 pub mod sub;

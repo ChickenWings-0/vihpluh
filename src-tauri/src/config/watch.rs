@@ -56,3 +56,46 @@ pub fn watch_file(
         .map_err(|e| AppError::internal(format!("cannot start the {name} watcher: {e}")))?;
     Ok(watcher)
 }
+
+/// Like [`watch_file`], for every file with the given extension in a folder (the presets
+/// folder). The folder is created if needed.
+pub fn watch_dir(
+    dir: &Path,
+    name: &str,
+    extension: &'static str,
+    mut on_change: impl FnMut() -> bool + Send + 'static,
+) -> AppResult<RecommendedWatcher> {
+    std::fs::create_dir_all(dir)?;
+    let (tx, rx) = mpsc::channel::<()>();
+    let mut watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
+        let Ok(event) = result else { return };
+        let relevant =
+            event.paths.iter().any(|p| p.extension().and_then(|e| e.to_str()) == Some(extension));
+        if relevant && !event.kind.is_access() {
+            let _ = tx.send(());
+        }
+    })
+    .map_err(|e| AppError::internal(format!("cannot watch {name}: {e}")))?;
+    watcher
+        .watch(dir, RecursiveMode::NonRecursive)
+        .map_err(|e| AppError::internal(format!("cannot watch {}: {e}", dir.display())))?;
+
+    std::thread::Builder::new()
+        .name(format!("watch-{name}"))
+        .spawn(move || {
+            while rx.recv().is_ok() {
+                loop {
+                    match rx.recv_timeout(DEBOUNCE) {
+                        Ok(()) => {}
+                        Err(RecvTimeoutError::Timeout) => break,
+                        Err(RecvTimeoutError::Disconnected) => return,
+                    }
+                }
+                if !on_change() {
+                    return;
+                }
+            }
+        })
+        .map_err(|e| AppError::internal(format!("cannot start the {name} watcher: {e}")))?;
+    Ok(watcher)
+}

@@ -18,5 +18,9 @@ pub const OSD_SHOW: &str = "osd://show";
 pub const APP_OPEN: &str = "app://open";
 /// `CuesEvent` — a subtitle track's cue index grew or finished (`subtitles::CUES_EVENT`).
 pub const MEDIA_CUES: &str = crate::subtitles::CUES_EVENT;
+/// `BookmarksChanged` — the bookmarks of a media key changed.
+pub const BOOKMARKS_CHANGED: &str = "bookmarks://changed";
+/// No payload — the set of presets changed (`preset_list` again).
+pub const PRESETS_CHANGED: &str = "presets://changed";
 /// `DebugStats` — development overlay only.
 pub const DEBUG_STATS: &str = "debug://stats";

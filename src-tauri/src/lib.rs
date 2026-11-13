@@ -2,6 +2,7 @@
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod bookmarks;
 pub mod cli;
 pub mod config;
 pub mod error;
@@ -50,6 +51,7 @@ pub struct AppState {
     pub thumbs: media::thumbs::ThumbService,
     pub waveform: media::waveform::WaveformService,
     pub cues: Arc<subtitles::CueIndex>,
+    pub presets: Arc<presets::PresetStore>,
     revealed: AtomicBool,
 }
 
@@ -171,6 +173,7 @@ fn launch(
     let eq_presets =
         Arc::new(config::eq_presets::EqPresetStore::new(paths.config.join("eq-presets.toml")));
     let cues = subtitles::CueIndex::new(paths.cache.clone());
+    let preset_store = presets::PresetStore::open(paths.config.join("presets"));
     let player = Player::start(
         config.clone(),
         surface,
@@ -182,11 +185,12 @@ fn launch(
             eq_presets: eq_presets.clone(),
             shader_dir: paths.cache.join("shaders"),
             cues: cues.clone(),
+            presets: preset_store.clone(),
         },
     )?;
     let sources = media::files::expand_sources(&cli.sources);
     if !sources.is_empty() {
-        player.open_cli(sources, cli.start, cli.paused, OpenMode::Replace);
+        player.open_cli(sources, cli.start, cli.paused, OpenMode::Replace, cli.preset.clone());
     } else if config.general.restore_session {
         // Nothing on the command line: bring back last time's queue, paused (§9.4).
         if let Some(saved) = session_path.as_deref().and_then(queue::session::load) {
@@ -209,6 +213,7 @@ fn launch(
         thumbs,
         waveform,
         cues,
+        presets: preset_store,
         revealed: AtomicBool::new(false),
     };
     let mut builder = tauri::Builder::default();
@@ -284,6 +289,20 @@ macro_rules! commands {
             ipc::commands::sub::sub_get_cues,
             ipc::commands::sub::sub_automatch,
             ipc::commands::sub::fonts_list,
+            ipc::commands::bookmark::bookmark_list,
+            ipc::commands::bookmark::bookmark_add,
+            ipc::commands::bookmark::bookmark_update,
+            ipc::commands::bookmark::bookmark_remove,
+            ipc::commands::preset::preset_list,
+            ipc::commands::preset::preset_get,
+            ipc::commands::preset::preset_save,
+            ipc::commands::preset::preset_delete,
+            ipc::commands::preset::preset_capture_current,
+            ipc::commands::preset::preset_update_current,
+            ipc::commands::preset::preset_apply,
+            ipc::commands::preset::preset_detach,
+            ipc::commands::preset::preset_matches_for,
+            ipc::commands::preset::preset_reveal,
             ipc::commands::tracks::tracks_add_external,
             ipc::commands::tracks::tracks_remove_external,
             ipc::commands::config::config_get,
@@ -382,6 +401,22 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("config.toml will not be reloaded automatically: {err}");
     }
 
+    // Presets: a change (a save, or an edit in another program) re-applies to what is
+    // playing; a file that does not load is named in one toast and skipped.
+    let (player, handle) = (state.player.clone(), app.handle().clone());
+    state.presets.on_change(move || {
+        player.presets_changed();
+        let _ = handle.emit(events::PRESETS_CHANGED, &());
+    });
+    let handle = app.handle().clone();
+    state.presets.on_problem(move |problem| {
+        let osd = OsdEvent::new(OsdKind::Warn, format!("Preset skipped — {problem}"));
+        let _ = handle.emit(events::OSD_SHOW, &osd);
+    });
+    if let Err(err) = state.presets.watch() {
+        tracing::warn!("the presets folder will not be reloaded automatically: {err}");
+    }
+
     // keybinds.toml is watched the same way; menus and tooltips follow without a restart.
     let handle = app.handle().clone();
     state.keybinds.on_change(move |keymap| {
@@ -433,7 +468,7 @@ fn on_second_instance(app: &AppHandle, argv: Vec<String>, cwd: String) {
             OpenBehavior::PlayNext => OpenMode::PlayNext,
         }
     };
-    state.player.open_cli(sources.clone(), cli.start, cli.paused, mode);
+    state.player.open_cli(sources.clone(), cli.start, cli.paused, mode, cli.preset.clone());
     let _ = app.emit(events::APP_OPEN, &OpenEvent { sources, mode });
     if mode == OpenMode::Replace {
         bring_to_front(app);

@@ -16,6 +16,7 @@ mod inspector;
 pub mod mpv;
 pub mod observe;
 pub mod options;
+pub mod presets;
 pub mod sleep;
 pub mod state;
 pub mod subs;
@@ -92,6 +93,13 @@ enum CoreMsg {
     Eq(Box<EqState>),
     Sleep(SleepRequest),
     Inspector(bool),
+    /// The presets folder changed (a save, or an edit in another program).
+    PresetsChanged,
+    /// `preset_apply`: this preset on top of whatever matches the loaded file.
+    ApplyPreset(String),
+    DetachPresets,
+    UpdatePreset(presets::PresetReply),
+    CapturePreset(presets::CaptureRequest, presets::PresetReply),
     Shutdown,
 }
 
@@ -132,6 +140,7 @@ pub struct Stores {
     /// Where the shipped flip shaders are written for mpv to load.
     pub shader_dir: PathBuf,
     pub cues: Arc<crate::subtitles::CueIndex>,
+    pub presets: Arc<crate::presets::PresetStore>,
 }
 
 /// The handle IPC code talks to.
@@ -169,7 +178,7 @@ impl Player {
         cli_mpv_opts: &[(String, String)],
         stores: Stores,
     ) -> Result<Arc<Self>, PlayerError> {
-        let Stores { db, session_path, eq_presets, shader_dir, cues } = stores;
+        let Stores { db, session_path, eq_presets, shader_dir, cues, presets } = stores;
         let _ = DEFAULT_SCREENSHOT_DIR.set(default_screenshot_dir.display().to_string());
         let caps = surface.capabilities();
         let chain =
@@ -265,6 +274,8 @@ impl Player {
                 last_inspector: Instant::now(),
                 sleep: None,
                 cues,
+                presets,
+                preset: presets::PresetState::default(),
             };
             std::thread::Builder::new()
                 .name("core".into())
@@ -369,6 +380,47 @@ impl Player {
         self.send(CoreMsg::Open(request, None));
     }
 
+    /// The playback position, read from mpv (`None` when nothing is loaded).
+    pub fn position(&self) -> Option<f64> {
+        self.mpv()?.get_f64("time-pos")
+    }
+
+    /// The presets folder changed: re-apply to the loaded file.
+    pub fn presets_changed(&self) {
+        self.send(CoreMsg::PresetsChanged);
+    }
+
+    pub fn apply_preset(&self, id: String) {
+        self.send(CoreMsg::ApplyPreset(id));
+    }
+
+    pub fn detach_presets(&self) {
+        self.send(CoreMsg::DetachPresets);
+    }
+
+    fn preset_reply(
+        &self,
+        message: impl FnOnce(presets::PresetReply) -> CoreMsg,
+    ) -> Result<crate::presets::Preset, String> {
+        let (tx, rx) = mpsc::channel();
+        self.send(message(tx));
+        rx.recv_timeout(Duration::from_secs(3))
+            .map_err(|_| "the player did not answer".to_string())?
+    }
+
+    /// The most specific applied preset with the live changes written into it (not saved).
+    pub fn updated_preset(&self) -> Result<crate::presets::Preset, String> {
+        self.preset_reply(CoreMsg::UpdatePreset)
+    }
+
+    /// A new preset made from the live values that differ from the defaults (not saved).
+    pub fn captured_preset(
+        &self,
+        request: presets::CaptureRequest,
+    ) -> Result<crate::presets::Preset, String> {
+        self.preset_reply(|reply| CoreMsg::CapturePreset(request, reply))
+    }
+
     pub fn queue(&self, op: QueueOp) {
         self.send(CoreMsg::Queue(op));
     }
@@ -400,9 +452,15 @@ impl Player {
         start: Option<crate::cli::StartPosition>,
         paused: bool,
         mode: crate::ipc::dto::OpenMode,
+        preset: Option<String>,
     ) {
-        let request =
-            OpenRequest { sources, mode, paused: paused.then_some(true), ..OpenRequest::default() };
+        let request = OpenRequest {
+            sources,
+            mode,
+            paused: paused.then_some(true),
+            preset_id: preset,
+            ..OpenRequest::default()
+        };
         self.send(CoreMsg::Open(request, start.map(crate::cli::StartPosition::to_mpv)));
     }
 
@@ -685,6 +743,8 @@ struct Core {
     last_inspector: Instant,
     sleep: Option<sleep::Sleep>,
     cues: Arc<crate::subtitles::CueIndex>,
+    presets: Arc<crate::presets::PresetStore>,
+    preset: presets::PresetState,
 }
 
 impl Core {
@@ -716,6 +776,9 @@ impl Core {
             wait = wait.min((self.last_patch + PATCH_INTERVAL).saturating_duration_since(now));
         }
         if let Some(due) = self.filters.eq_rebuild_due {
+            wait = wait.min(due.saturating_duration_since(now));
+        }
+        if let Some(due) = self.preset.recheck_due() {
             wait = wait.min(due.saturating_duration_since(now));
         }
         if self.inspector {
@@ -755,6 +818,15 @@ impl Core {
             CoreMsg::Eq(eq) => self.set_eq(*eq),
             CoreMsg::Sleep(request) => self.set_sleep(request),
             CoreMsg::Inspector(enabled) => self.set_inspector(enabled),
+            CoreMsg::PresetsChanged => self.apply_presets(),
+            CoreMsg::ApplyPreset(id) => self.force_preset(id),
+            CoreMsg::DetachPresets => self.detach_presets(),
+            CoreMsg::UpdatePreset(reply) => {
+                let _ = reply.send(self.updated_preset());
+            }
+            CoreMsg::CapturePreset(request, reply) => {
+                let _ = reply.send(self.captured_preset(&request));
+            }
             CoreMsg::Shutdown => {}
         }
     }
@@ -901,6 +973,9 @@ impl Core {
         }
         let old = std::mem::replace(&mut self.config, config);
         self.audio_config_changed(&old);
+        if old.playback.presets_enabled != self.config.playback.presets_enabled {
+            self.apply_presets();
+        }
     }
 
     // ── Output ──────────────────────────────────────────────────────────────
@@ -945,6 +1020,7 @@ impl Core {
     /// Emits the top-level keys that changed since the last patch (§7.4), updates the shared
     /// snapshot, and keeps the OS in step (sleep inhibition, media overlay).
     fn flush_patch(&mut self) {
+        self.refresh_preset_dirty();
         let state = &self.mirror.state;
         self.inhibitor.set(power::required(state.status, state.media.as_ref().map(|m| m.kind)));
         if let Some(media) = &mut self.media {
