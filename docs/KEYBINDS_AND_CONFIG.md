@@ -149,8 +149,9 @@ Keys are physical US-layout positions (§3.1). "—" = unbound by default.
 | `mpv.command` | Raw mpv command (custom bindings only, §3.4) | — |
 
 **`ui.escape` chain** — the first applicable step runs, then stops:
-close tooltip/menu/popover → return keyboard focus to the player → close settings / shortcuts / palette →
+close menu/popover → return keyboard focus to the player → close settings / shortcuts / palette →
 close library drawer → leave Zen → leave PiP → leave fullscreen. It never closes the dock and never pauses.
+A hover tooltip also closes on Escape but does not use up the key.
 
 ### Context-scoped actions
 
@@ -197,7 +198,7 @@ US glyph: `` ` `` `-` `=` `[` `]` `\` `;` `'` `,` `.` `/`. Numpad: `Num0`–`Num
 |---|---|
 | Mouse buttons | `MouseLeft`, `MouseLeftDouble`, `MouseMiddle`, `MouseRight`, `MouseBack`, `MouseForward` |
 | Wheel | `WheelUp`, `WheelDown`, `WheelLeft`, `WheelRight` |
-| Media keys | `MediaPlayPause`, `MediaStop`, `MediaTrackNext`, `MediaTrackPrevious` (delivered by the OS even when unfocused; `MediaPlayPause` → `player.toggle_pause` is built in) |
+| Media keys | `MediaPlayPause`, `MediaStop`, `MediaTrackNext`, `MediaTrackPrevious` (delivered by the OS even when unfocused; `MediaPlayPause` → `player.toggle_pause` is built in). They reach vihpluh only through the OS media controls (SMTC / MPRIS), which map them to fixed actions; rebinding them in `keybinds.toml` has no effect. |
 
 Rules:
 

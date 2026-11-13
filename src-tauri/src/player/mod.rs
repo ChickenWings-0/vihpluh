@@ -360,6 +360,18 @@ impl Player {
         self.set("ab-loop-b", Value::Text(text(points.b)))
     }
 
+    pub fn set_audio_delay(&self, ms: i32) -> Result<(), MpvError> {
+        self.set("audio-delay", Value::Double(f64::from(ms) / 1000.0))
+    }
+
+    pub fn set_sub_delay(&self, ms: i32) -> Result<(), MpvError> {
+        self.set("sub-delay", Value::Double(f64::from(ms) / 1000.0))
+    }
+
+    pub fn set_sub_visible(&self, visible: bool) -> Result<(), MpvError> {
+        self.set("sub-visibility", Value::Flag(visible))
+    }
+
     pub fn select_track(&self, slot: TrackSlot, id: Option<i64>) -> Result<(), MpvError> {
         let property = match slot {
             TrackSlot::Video => "vid",
@@ -411,15 +423,18 @@ impl Player {
             mpv.wakeup();
         }
         let _ = self.core_tx.send(CoreMsg::Shutdown);
+        let started = std::time::Instant::now();
         if let Ok(mut threads) = self.threads.lock() {
             for thread in threads.drain(..) {
+                let name = thread.thread().name().unwrap_or("?").to_string();
                 let _ = thread.join();
+                tracing::debug!("shutdown: {name} joined after {:?}", started.elapsed());
             }
         }
         // GPU resources go before the handle that feeds them.
         self.surface.detach();
         drop(mpv);
-        tracing::info!("player stopped");
+        tracing::info!("player stopped after {:?}", started.elapsed());
     }
 }
 

@@ -8,19 +8,14 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
 
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::RecommendedWatcher;
 use toml_edit::DocumentMut;
 
 use super::schema::{FREE_FORM_TABLES, SCHEMA_VERSION};
 use super::{Config, ConfigWarning, defaults_table, from_user_text, get_path};
 use crate::error::{AppError, AppResult};
-
-/// Editors often save in several steps (truncate, write, rename); wait for quiet.
-const WATCH_DEBOUNCE: Duration = Duration::from_millis(150);
 
 /// What changed, handed to the change callback.
 #[derive(Debug, Clone)]
@@ -164,49 +159,17 @@ impl ConfigStore {
         }
     }
 
-    /// Starts watching the config file for external edits. Creates the (empty) config
-    /// directory if needed so there is something to watch.
+    /// Starts watching the config file for external edits.
     pub fn watch(self: &Arc<Self>) -> AppResult<()> {
-        let dir = self.path.parent().map(Path::to_path_buf).unwrap_or_default();
-        std::fs::create_dir_all(&dir)?;
-        let file_name = self.path.file_name().map(ToOwned::to_owned);
-
-        let (tx, rx) = mpsc::channel::<()>();
-        let mut watcher =
-            notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-                let Ok(event) = result else { return };
-                let touches_file =
-                    event.paths.iter().any(|p| p.file_name() == file_name.as_deref());
-                if touches_file && !event.kind.is_access() {
-                    let _ = tx.send(());
-                }
-            })
-            .map_err(|e| AppError::internal(format!("cannot watch the config file: {e}")))?;
-        watcher
-            .watch(&dir, RecursiveMode::NonRecursive)
-            .map_err(|e| AppError::internal(format!("cannot watch {}: {e}", dir.display())))?;
-
         let store = Arc::downgrade(self);
-        std::thread::Builder::new()
-            .name("config-watch".into())
-            .spawn(move || {
-                while rx.recv().is_ok() {
-                    // Swallow the burst, then reload once.
-                    loop {
-                        match rx.recv_timeout(WATCH_DEBOUNCE) {
-                            Ok(()) => {}
-                            Err(RecvTimeoutError::Timeout) => break,
-                            Err(RecvTimeoutError::Disconnected) => return,
-                        }
-                    }
-                    match store.upgrade() {
-                        Some(store) => store.reload(),
-                        None => return,
-                    }
+        let watcher =
+            super::watch::watch_file(&self.path, "config", move || match store.upgrade() {
+                Some(store) => {
+                    store.reload();
+                    true
                 }
-            })
-            .map_err(|e| AppError::internal(format!("cannot start the config watcher: {e}")))?;
-
+                None => false,
+            })?;
         if let Ok(mut slot) = self.watcher.lock() {
             *slot = Some(watcher);
         }
@@ -394,6 +357,8 @@ fn flatten_into(
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     fn temp_store(name: &str, initial: Option<&str>) -> (Arc<ConfigStore>, PathBuf) {
         let dir =

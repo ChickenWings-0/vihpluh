@@ -178,7 +178,7 @@ parallel with WebView2 start-up (D18). To revisit with a release build in the Ph
 
 ---
 
-## 4. Phase 2 — Core playback and state sync — ◐ in progress
+## 4. Phase 2 — Core playback and state sync — ☑ closed (Windows, 2026-11-13) — Linux pending
 
 **Goal:** the Rust core fully mirrors mpv and exposes it over typed IPC; a bare-bones test UI drives it.
 
@@ -197,7 +197,7 @@ parallel with WebView2 start-up (D18). To revisit with a release build in the Ph
 ### Verification
 
 - [x] Play/pause/seek/volume/mute/speed from the dev UI all reflect in `PlayerState` within one patch; no polling anywhere in the frontend. *(Driven through the same commands over the webview debugging port: 44–184 ms per change, revisions contiguous, 5 rapid changes coalesced into 2 patches.)*
-- [ ] Interpolated position stays within ±50 ms of mpv's `time-pos` over 10 min at 1× and 2× (log the drift).
+- [x] Interpolated position stays within ±50 ms of mpv's `time-pos` over 10 min at 1× and 2× (log the drift). *(**W**, T13: 1× max 49.2 ms / mean 14.2 ms over 1 168 samples; 2× max 46.4 ms / mean 13.8 ms. Within budget, but with little margin.)*
 - [x] Switching audio and subtitle tracks on T1/T5 works; `selected` updates. *(T1 only: T5 is not assembled yet.)*
 - [x] Editing `.local/config/config.toml` in a text editor while running emits `config://changed` and applies (test with `audio.max_volume`). *(115 reached mpv's `volume-max` within the 150 ms debounce; an invalid value raised one warning naming the key; deleting the file restored defaults.)*
 - [ ] Media keys play/pause from another focused app; the OS media overlay shows the title (W: SMTC; L: MPRIS via `playerctl status`). *(**W** ✓: the session lists the title and live status; a toggle sent through the Windows session (the path media keys take) paused and resumed playback while the window was in the background. No physical key was pressed.)*
@@ -207,42 +207,55 @@ parallel with WebView2 start-up (D18). To revisit with a release build in the Ph
 
 **Platforms:** W + L-Wayland (X11 smoke test only).
 
+**Phase 2 notes (2026-11-13, Windows only).** Shutdown measured 0.4–0.9 s in three cases (mpv's own
+teardown is most of it). Once, after 20 minutes of continuous playback, closing took 2.01 s — the
+shutdown watchdog fired. It did not reproduce; watch for it.
+
 ---
 
-## 5. Phase 3 — Player chrome — ☐ not started
+## 5. Phase 3 — Player chrome — ☑ closed (Windows, 2026-11-13) — Linux pending; three hands-on checks pending (see notes)
 
 **Goal:** the real UI shell — bars, auto-hide, shortcuts, context menu, Zen, OSD. After this phase vihpluh is usable as a daily player for single files.
 
-- [ ] Primitives (D§8): `IconButton`, `Button`, `Tooltip`, `Menu`, `Popover`, `Slider`, key cap, toast host. Icon pipeline: mono set (D§5.1) incl. custom glyphs.
-- [ ] `actions/registry.ts` + definitions for every action in K§2 that this phase can back (playback, volume, window, UI); stubs (`isEnabled: false`) for the rest so the registry is complete from day one.
-- [ ] `keybinds/`: `normalize.ts`, `engine.ts` (K§3.1–3.2), `resources/keymaps/vihpluh.toml` = K§2 defaults, `keybinds_get`, user overlay from `keybinds.toml` incl. `[[custom]]` (K§3.3–3.4). Mouse/wheel bindings over the video area only.
-- [ ] Focus model (D§13): player root focus, blur-after-click on chrome buttons, Tab traversal, `ui.escape` chain.
-- [ ] **TopBar** (D§7.3): title button, ☰ consolidated menu, PiP button (stub), custom window controls, drag region, double-click maximize, resize hit zones.
-- [ ] **BottomBar** (D§7.4): left transport cluster, time labels, seek bar v1 (D§8.1 without thumbnails/waveform: thick track, buffer range, hover ghost + time label, chapter gaps, drag scrub semantics), **cone volume slider** (D§8.2), stub buttons for tracks/queue/sidebar, fullscreen.
-- [ ] Auto-hide state machine (D§7.1) incl. fullscreen top-edge rule and cursor hiding; `useAutoHide` unit-tested with fake timers.
-- [ ] Fullscreen (`window_set_mode`), Zen mode (D§7.2), always-on-top.
-- [ ] Context menu (D§8.8), generated from the action registry.
-- [ ] OSD flash + toasts (D§8.9), `osd://show` handling, optional shortcut badge.
-- [ ] Idle screen v1 (D§11.3): open buttons + drop target (history rows arrive in Phase 4).
-- [ ] File open dialogs (`tauri-plugin-dialog`), OS drag-and-drop onto the window (replace; Shift = enqueue once Phase 4 lands), `app.paste_and_play`.
-- [ ] Responsive collapse rules (D§6.4).
+- [x] Primitives (D§8): `IconButton`, `Button`, `Tooltip`, `Menu`, `Popover`, `Slider`, key cap, toast host. Icon pipeline: mono set (D§5.1) incl. custom glyphs. *(Custom glyphs so far: queue, sidebar, PiP, Zen.)*
+- [x] `actions/registry.ts` + definitions for every action in K§2 that this phase can back (playback, volume, window, UI); stubs (`isEnabled: false`) for the rest so the registry is complete from day one. *(A test fails if the registry and the shipped keymap ever disagree. Track cycling and the delay steps are backed too, via three small commands from A§7.3.)*
+- [x] `keybinds/`: `normalize.ts`, `engine.ts` (K§3.1–3.2), `resources/keymaps/vihpluh.toml` = K§2 defaults, `keybinds_get`, user overlay from `keybinds.toml` incl. `[[custom]]` (K§3.3–3.4). Mouse/wheel bindings over the video area only.
+- [x] Focus model (D§13): player root focus, blur-after-click on chrome buttons, Tab traversal, `ui.escape` chain.
+- [x] **TopBar** (D§7.3): title button, ☰ consolidated menu, PiP button (stub), custom window controls, drag region, double-click maximize, resize hit zones. *(Hit zones are drawn only where the OS has no resize border of its own, i.e. not on Windows.)*
+- [x] **BottomBar** (D§7.4): left transport cluster, time labels, seek bar v1 (D§8.1 without thumbnails/waveform: thick track, buffer range, hover ghost + time label, chapter gaps, drag scrub semantics), **cone volume slider** (D§8.2), stub buttons for tracks/queue/sidebar, fullscreen.
+- [x] Auto-hide state machine (D§7.1) incl. fullscreen top-edge rule and cursor hiding; `useAutoHide` unit-tested with fake timers. *(The logic is a plain `AutoHide` controller with 11 fake-timer tests; the hook only wires it.)*
+- [x] Fullscreen (`window_set_mode`), Zen mode (D§7.2), always-on-top.
+- [x] Context menu (D§8.8), generated from the action registry.
+- [x] OSD flash + toasts (D§8.9), `osd://show` handling, optional shortcut badge.
+- [x] Idle screen v1 (D§11.3): open buttons + drop target (history rows arrive in Phase 4).
+- [ ] File open dialogs (`tauri-plugin-dialog`), OS drag-and-drop onto the window (replace; Shift = enqueue once Phase 4 lands), `app.paste_and_play`. *(Implemented, not yet exercised: each needs a person at the machine — a modal dialog takes focus, an OS drag needs the real pointer, and paste reads the real clipboard.)*
+- [x] Responsive collapse rules (D§6.4).
 
 ### Verification
 
-- [ ] Every default shortcut in K§2 for implemented actions works; each shows the right OSD when chrome is hidden.
-- [ ] Click Mute, then press Space → playback toggles (focus did not stick to the button).
-- [ ] Tab reaches every bar control with a visible focus ring; Esc returns to the player; Space on a focused button activates that button.
-- [ ] Bars hide after 2 s of stillness while playing, never while paused, never while a menu is open or a slider is dragged. In fullscreen, nudging the mouse shows only the bottom bar; touching the top edge shows the top bar.
-- [ ] Seek bar: resting 8 px, 12 px on hover; click lands within one frame of the target with `precise_seek`; dragging scrubs smoothly on T1; wheel over it seeks.
-- [ ] Cone slider: drag, wheel, double-click-to-100, boost zone turns red above 100 %, mute greys the fill.
-- [ ] `Z` hides everything including the cursor; `Z`/`Esc` restores the exact previous layout.
-- [ ] Context menu shows live shortcuts; changing a binding in `keybinds.toml` updates menu and tooltips without restart.
-- [ ] Window: drag by top bar, resize from all edges/corners, double-click maximizes, window controls work (W + L).
-- [ ] Shrinking the window to 480 px collapses the bar per D§6.4 with nothing clipped.
-- [ ] Performance: with chrome animating over T4, dropped frames within A§14; no webview long tasks > 16 ms during hide/show (DevTools performance trace).
-- [ ] Design audit: no hex colours, no off-token radii, no `rounded-full` outside the seek thumb (grep).
+- [x] Every default shortcut in K§2 for implemented actions works; each shows the right OSD when chrome is hidden. *(20 shortcuts driven one by one, each checked against the mirrored state; OSD checked with the bars hidden.)*
+- [x] Click Mute, then press Space → playback toggles (focus did not stick to the button).
+- [x] Tab reaches every bar control with a visible focus ring; Esc returns to the player; Space on a focused button activates that button.
+- [x] Bars hide after 2 s of stillness while playing, never while paused, never while a menu is open or a slider is dragged. In fullscreen, nudging the mouse shows only the bottom bar; touching the top edge shows the top bar.
+- [x] Seek bar: resting 8 px, 12 px on hover; click lands within one frame of the target with `precise_seek`; dragging scrubs smoothly on T1; wheel over it seeks. *(Click: target 45.003 s, landed 45.003 s. Drag release: 63.02 s for 63.00 s.)*
+- [x] Cone slider: drag, wheel, double-click-to-100, boost zone turns red above 100 %, mute greys the fill.
+- [x] `Z` hides everything including the cursor; `Z`/`Esc` restores the exact previous layout.
+- [x] Context menu shows live shortcuts; changing a binding in `keybinds.toml` updates menu and tooltips without restart.
+- [ ] Window: drag by top bar, resize from all edges/corners, double-click maximizes, window controls work (W + L). *(**W**: the minimize/maximize/restore/close controls work. Moving and resizing hand the pointer to the OS, so they need a person with a real mouse.)*
+- [x] Shrinking the window to 480 px collapses the bar per D§6.4 with nothing clipped. *(Checked at 880, 700, 500, 480 px.)*
+- [x] Performance: with chrome animating over T4, dropped frames within A§14; no webview long tasks > 16 ms during hide/show (DevTools performance trace). *(60 s, 21 hide/show cycles: 0 dropped, 0 delayed frames, no long tasks reported, animation-frame gaps max 13.8 ms. The browser reports long tasks only above 50 ms, so the 16 ms bound is shown by the frame gaps.)*
+- [x] Design audit: no hex colours, no off-token radii, no `rounded-full` outside the seek thumb (grep).
 
 **Platforms:** W + L-Wayland + L-X11.
+
+**Phase 3 notes (2026-11-13, Windows only).** Verification was driven through the webview's DevTools
+input channel (synthetic key/mouse events delivered to the app alone), so it never touched the
+owner's keyboard, pointer, or screen. Three Windows checks still need a person at the machine:
+open-file/open-folder dialogs, an OS drag-and-drop onto the window, and paste-and-play from the
+clipboard; plus moving and resizing the window by mouse. Bugs found by these checks and fixed: the
+seek bar dropped a drag when pointer capture was lost; pointer presses on sliders took keyboard
+focus; a lingering hover tooltip swallowed Escape; a hidden hover label widened the bar at narrow
+widths.
 
 ---
 

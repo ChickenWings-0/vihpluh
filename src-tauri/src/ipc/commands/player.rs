@@ -9,10 +9,13 @@ pub fn player_snapshot(state: State<'_, AppState>) -> PlayerState {
     state.player.snapshot()
 }
 
-#[tauri::command]
-pub fn player_open(state: State<'_, AppState>, req: OpenRequest) -> AppResult<()> {
+/// Folders expand to their media files, which touches the disk, so this runs off the main
+/// thread.
+#[tauri::command(async)]
+pub fn player_open(state: State<'_, AppState>, mut req: OpenRequest) -> AppResult<()> {
+    req.sources = crate::media::files::expand_sources(&req.sources);
     if req.sources.is_empty() {
-        return Err(AppError::invalid("nothing to open"));
+        return Err(AppError::not_found("nothing playable there"));
     }
     state.player.open(req);
     Ok(())

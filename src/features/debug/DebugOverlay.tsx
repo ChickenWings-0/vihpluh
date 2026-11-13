@@ -4,9 +4,8 @@ import type { DebugStats } from "@/ipc/bindings/DebugStats";
 import { onDebugStats } from "@/ipc/events";
 
 /**
- * Development-only readout of the decode path plus compositing probes for spike S1
- * (IMPLEMENTATION_PLAN §3.2–§3.3): a half-transparent box, an animated element, and the last
- * pointer event, all drawn over the video.
+ * Development-only readout of the decode path and the last pointer event, drawn over the video
+ * (IMPLEMENTATION_PLAN §3.3).
  */
 export function DebugOverlay({ info }: { info: AppInfo | null }) {
   const [stats, setStats] = useState<DebugStats | null>(null);
@@ -40,21 +39,13 @@ export function DebugOverlay({ info }: { info: AppInfo | null }) {
   ];
 
   return (
-    <>
-      <div className="pointer-events-none absolute top-2 left-2 z-(--z-osd) rounded-surface border border-line-strong bg-surface/90 px-3 py-2 font-mono text-fg text-sm">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex gap-3">
-            <span className="w-16 text-fg-3">{label}</span>
-            <span className="tabular">{value}</span>
-          </div>
-        ))}
-      </div>
-      <div className="pointer-events-none absolute right-4 bottom-4 z-(--z-osd) flex items-end gap-4">
-        <div className="h-24 w-40 rounded-surface bg-accent/50 p-2 text-on-accent text-sm">
-          50 % alpha
+    <div className="pointer-events-none absolute top-12 left-2 z-(--z-osd) rounded-surface border border-line-strong bg-surface/90 px-3 py-2 font-mono text-fg text-sm">
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex gap-3">
+          <span className="w-16 text-fg-3">{label}</span>
+          <span className="tabular">{value}</span>
         </div>
-        <div className="h-12 w-12 animate-spin rounded-control bg-fg" />
-      </div>
-    </>
+      ))}
+    </div>
   );
 }

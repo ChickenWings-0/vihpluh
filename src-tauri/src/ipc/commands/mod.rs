@@ -4,8 +4,12 @@
 //! or touch the disk is marked `#[tauri::command(async)]` so it runs off the main thread.
 
 pub mod app;
+pub mod audio;
 pub mod config;
 #[cfg(debug_assertions)]
 pub mod debug;
+pub mod keybinds;
 pub mod player;
+pub mod sub;
 pub mod tracks;
+pub mod window;

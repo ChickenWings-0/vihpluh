@@ -798,12 +798,14 @@ interface AppInfo {
 | `keybinds_set_base` | `{ base: "vihpluh" \| "vlc" \| "mpv" }` | `void` |
 | `session_ui_get` | — | `UiState` (`{ sidebarOpen, sidebarTab, queueOpen, libraryOpen }`) |
 | `session_ui_set` | `Partial<UiState>` | `void` (debounced into `session.json`) |
+| `window_get_state` | — | `WindowState` (`{ mode, maximized, minimized, focused, alwaysOnTop }`) |
 | `window_set_mode` | `{ mode: "normal" \| "fullscreen" \| "pip" }` | `void` |
 | `window_set_always_on_top` | `{ enabled: boolean }` | `void` |
 | `window_minimize` / `window_toggle_maximize` / `window_close` | — | `void` |
 | `waveform_request` | `{ mediaKey: string, trackId: number }` | `{ status: "ready" \| "running" \| "queued" \| "unavailable" }` |
 | `waveform_get` | `{ mediaKey: string, trackId: number }` | binary `ArrayBuffer` (`.vwf`, §11.2) |
 | `app_info` | — | `AppInfo` |
+| `app_pick_media` | `{ kind: "files" \| "folder" }` | `string[]` (native open dialog; empty when cancelled) |
 | `app_ready` | — | `void` (frontend painted; show window) |
 | `app_reveal` | `{ path: string }` | `void` |
 | `app_open_config_dir` | — | `void` |
@@ -821,6 +823,7 @@ Window dragging and resize-edge dragging use Tauri's window API directly via `tr
 | `queue://changed` | `QueueState` | On mutation |
 | `config://changed` | `{ path: string, value: Json }` | On `config_set` or external file edit (watched) |
 | `keybinds://changed` | `ResolvedKeymap` | On change |
+| `window://state` | `WindowState` | Mode, maximize, focus, or always-on-top changed |
 | `osd://show` | `{ kind: "info" \| "warn" \| "error", text: string, icon?: string, value?: number, action?: { label: string, actionId: string } }` | Core-originated notices (resume, hwdec fallback, errors) |
 | `media://waveform` | `{ mediaKey, trackId, status, progress: number }` | Job progress, 4 Hz |
 | `media://cues` | `{ mediaKey, trackId, coverage }` | Cue index grew/finished |
@@ -1467,6 +1470,10 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D21 | With a home override (`--home`, `VIHPLUH_HOME`, portable, dev builds) an empty `general.screenshot_dir` means `<home>/screenshots` | Those modes must keep everything in one folder; dev runs must never write into the owner's Pictures folder. |
 | D22 | IPC handlers write mpv properties asynchronously (`mpv_set_property_async`) and let the change come back as an event; only the core actor decides policy (open, pause-at-end, stop) | A handler must never block on mpv's core, which can be busy opening a file. The mirrored state still has exactly one writer. |
 | D23 | `player://patch` carries only the top-level `PlayerState` keys whose JSON changed since the last patch | A cheap, exact diff with no per-field bookkeeping; the frontend merges shallowly and re-fetches on a revision gap. |
+| D24 | Open dialogs run in Rust (`app_pick_media`) rather than through the dialog plugin's JS API | No dialog permission is granted to the webview, and the media extension lists stay in one place (`media/files.rs`). |
+| D25 | Media keys are handled only through the OS media controls (SMTC / MPRIS); the frontend ignores `Media*` key events | They arrive through the OS even when vihpluh is unfocused; handling the key events as well would toggle twice. |
+| D26 | All menus, including the context menu, are one Radix dropdown primitive; the context menu is anchored to an invisible point | It opens the same way from a right-click, the ContextMenu key, or Shift+F10, and shares the menu renderer that shows live shortcuts. |
+| D27 | Pointer presses on sliders (seek bar, cone, parameter sliders) do not focus them; Tab does | DESIGN_SYSTEM §13: pointer use never leaves focus on chrome, so single-key shortcuts keep working and Escape is not spent returning focus. |
 
 ### Open risks (each owned by a Phase 1 spike)
 

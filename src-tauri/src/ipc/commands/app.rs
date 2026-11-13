@@ -36,3 +36,42 @@ impl From<tauri::Error> for AppError {
         AppError::internal(err.to_string())
     }
 }
+
+#[derive(Debug, Clone, Copy, serde::Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum PickKind {
+    Files,
+    Folder,
+}
+
+/// Shows the native "open" dialog and returns what was chosen (empty when cancelled).
+/// The dialog is modal and blocks this call, so it runs off the main thread.
+#[tauri::command(async)]
+pub fn app_pick_media(window: WebviewWindow, kind: PickKind) -> Vec<String> {
+    use crate::media::files::{AUDIO_EXTENSIONS, VIDEO_EXTENSIONS};
+    use tauri_plugin_dialog::DialogExt;
+
+    let media: Vec<&str> = VIDEO_EXTENSIONS.iter().chain(AUDIO_EXTENSIONS).copied().collect();
+    let dialog = window.dialog().file().set_parent(&window);
+    let picked = match kind {
+        PickKind::Files => dialog
+            .set_title("Open file")
+            .add_filter("Media", &media)
+            .add_filter("Video", VIDEO_EXTENSIONS)
+            .add_filter("Audio", AUDIO_EXTENSIONS)
+            .add_filter("All files", &["*"])
+            .blocking_pick_files()
+            .unwrap_or_default(),
+        PickKind::Folder => {
+            dialog.set_title("Open folder").blocking_pick_folder().into_iter().collect()
+        }
+    };
+    picked
+        .into_iter()
+        .map(|path| match path.as_path() {
+            Some(path) => path.display().to_string(),
+            None => path.to_string(),
+        })
+        .collect()
+}

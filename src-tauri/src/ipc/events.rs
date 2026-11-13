@@ -4,6 +4,8 @@
 pub const PLAYER_PATCH: &str = "player://patch";
 /// `TimeEvent` — 5 Hz while playing, immediately on seek/pause/load.
 pub const PLAYER_TIME: &str = "player://time";
+/// `ResolvedKeymap` — after `keybinds.toml` changed.
+pub const KEYBINDS_CHANGED: &str = "keybinds://changed";
 /// `ConfigChanged` — one per changed setting.
 pub const CONFIG_CHANGED: &str = "config://changed";
 /// `OsdEvent` — notices that originate in the core.

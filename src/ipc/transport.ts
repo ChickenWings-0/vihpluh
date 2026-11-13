@@ -4,6 +4,8 @@
  */
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppError } from "./bindings/AppError";
 
 export type Unlisten = () => void;
@@ -36,6 +38,59 @@ export function listen<T>(event: string, handler: (payload: T) => void): Unliste
     if (cancelled) fn();
     else unlisten = fn;
   });
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
+
+// ── Window helpers (direct Tauri window API; ARCHITECTURE §7.3 last line) ───────────────────
+
+export type ResizeEdge =
+  | "East"
+  | "North"
+  | "NorthEast"
+  | "NorthWest"
+  | "South"
+  | "SouthEast"
+  | "SouthWest"
+  | "West";
+
+/** Starts an OS window move; call from a primary-button pointerdown/move. */
+export function startWindowDrag(): Promise<void> {
+  return getCurrentWindow().startDragging();
+}
+
+/** Starts an OS window resize from one edge or corner. */
+export function startWindowResize(edge: ResizeEdge): Promise<void> {
+  return getCurrentWindow().startResizeDragging(edge);
+}
+
+export type DropEvent =
+  | { type: "enter" | "over"; x: number; y: number }
+  | { type: "drop"; x: number; y: number; paths: string[] }
+  | { type: "leave" };
+
+/** Files dragged from the OS onto the window. Positions are in CSS pixels. */
+export function onFileDrop(handler: (event: DropEvent) => void): Unlisten {
+  let cancelled = false;
+  let unlisten: Unlisten | undefined;
+  const scale = () => window.devicePixelRatio || 1;
+  getCurrentWebview()
+    .onDragDropEvent(({ payload }) => {
+      if (payload.type === "leave") {
+        handler({ type: "leave" });
+        return;
+      }
+      const x = payload.position.x / scale();
+      const y = payload.position.y / scale();
+      if (payload.type === "drop") handler({ type: "drop", x, y, paths: payload.paths });
+      else handler({ type: payload.type, x, y });
+    })
+    .then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
   return () => {
     cancelled = true;
     unlisten?.();

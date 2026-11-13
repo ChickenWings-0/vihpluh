@@ -7,10 +7,12 @@ pub mod config;
 pub mod error;
 pub mod ipc;
 pub mod logging;
+pub mod media;
 pub mod paths;
 pub mod platform;
 pub mod player;
 pub mod video;
+pub mod window;
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -21,6 +23,7 @@ use clap::Parser;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindowBuilder};
 
 use cli::Cli;
+use config::keybinds::KeybindStore;
 use config::schema::OpenBehavior;
 use config::store::{ConfigChange, ConfigStore};
 use ipc::dto::{ConfigChanged, OpenEvent, OpenMode, OsdEvent, OsdKind};
@@ -28,11 +31,13 @@ use ipc::events;
 use paths::Paths;
 use player::Player;
 use video::Capabilities;
+use window::WindowManager;
 
 /// Shared application state, managed by Tauri.
 pub struct AppState {
     pub paths: Paths,
     pub config: Arc<ConfigStore>,
+    pub keybinds: Arc<KeybindStore>,
     pub player: Arc<Player>,
     pub capabilities: Capabilities,
     revealed: AtomicBool,
@@ -147,18 +152,28 @@ fn launch(
     let capabilities = surface.capabilities();
     let player =
         Player::start(config.clone(), surface, &paths.default_screenshot_dir(), &cli.mpv_opts)?;
-    if !cli.sources.is_empty() {
-        player.open_cli(cli.sources.clone(), cli.start, cli.paused, OpenMode::Replace);
+    let sources = media::files::expand_sources(&cli.sources);
+    if !sources.is_empty() {
+        player.open_cli(sources, cli.start, cli.paused, OpenMode::Replace);
     }
 
-    let state =
-        AppState { paths, config: store, player, capabilities, revealed: AtomicBool::new(false) };
+    let keybinds = KeybindStore::open(paths.config.join("keybinds.toml"));
+    let state = AppState {
+        paths,
+        config: store,
+        keybinds,
+        player,
+        capabilities,
+        revealed: AtomicBool::new(false),
+    };
     let mut builder = tauri::Builder::default();
     if config.general.single_instance {
         builder = builder.plugin(tauri_plugin_single_instance::init(on_second_instance));
     }
     let app = builder
+        .plugin(tauri_plugin_dialog::init())
         .manage(state)
+        .manage(WindowManager::default())
         .setup(|app| {
             setup(app)?;
             Ok(())
@@ -195,10 +210,21 @@ macro_rules! commands {
             ipc::commands::player::player_stop,
             ipc::commands::player::player_screenshot,
             ipc::commands::player::player_mpv_command,
+            ipc::commands::app::app_pick_media,
             ipc::commands::tracks::tracks_select,
+            ipc::commands::audio::audio_set_delay,
+            ipc::commands::sub::sub_set_delay,
+            ipc::commands::sub::sub_set_visible,
             ipc::commands::config::config_get,
             ipc::commands::config::config_set,
             ipc::commands::config::config_reset,
+            ipc::commands::keybinds::keybinds_get,
+            ipc::commands::window::window_get_state,
+            ipc::commands::window::window_set_mode,
+            ipc::commands::window::window_set_always_on_top,
+            ipc::commands::window::window_minimize,
+            ipc::commands::window::window_toggle_maximize,
+            ipc::commands::window::window_close,
             $($extra),*
         ]
     };
@@ -230,6 +256,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .data_directory(state.paths.data.join("webview"))
         .build()?;
     state.player.attach(app.handle().clone(), &window, platform::native_window_handle(&window))?;
+    WindowManager::track(&window);
 
     // Settings changes — from the UI or from an editor saving config.toml — apply live.
     let (player, handle) = (state.player.clone(), app.handle().clone());
@@ -246,6 +273,19 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     });
     if let Err(err) = state.config.watch() {
         tracing::warn!("config.toml will not be reloaded automatically: {err}");
+    }
+
+    // keybinds.toml is watched the same way; menus and tooltips follow without a restart.
+    let handle = app.handle().clone();
+    state.keybinds.on_change(move |keymap| {
+        let _ = handle.emit(events::KEYBINDS_CHANGED, keymap);
+        for warning in &keymap.warnings {
+            let osd = OsdEvent::new(OsdKind::Warn, format!("Shortcuts: {warning}"));
+            let _ = handle.emit(events::OSD_SHOW, &osd);
+        }
+    });
+    if let Err(err) = state.keybinds.watch() {
+        tracing::warn!("keybinds.toml will not be reloaded automatically: {err}");
     }
 
     let handle = app.handle().clone();
@@ -266,7 +306,10 @@ fn on_second_instance(app: &AppHandle, argv: Vec<String>, cwd: String) {
             return;
         }
     };
-    let sources = cli::normalize_sources(&cli.sources, std::path::Path::new(&cwd));
+    let sources = media::files::expand_sources(&cli::normalize_sources(
+        &cli.sources,
+        std::path::Path::new(&cwd),
+    ));
     tracing::info!(count = sources.len(), "second instance forwarded its command line");
     if sources.is_empty() {
         bring_to_front(app);
