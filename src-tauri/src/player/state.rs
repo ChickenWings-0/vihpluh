@@ -194,6 +194,17 @@ impl Mirror {
         self.refresh_status()
     }
 
+    /// A load failed before mpv was involved (e.g. the file is missing).
+    pub fn fail(&mut self, message: &str) -> Effects {
+        self.inputs.loading = false;
+        self.inputs.error = true;
+        self.state.error = Some(message.to_string());
+        let mut effects = self.refresh_status();
+        effects.state = true;
+        effects.failed = Some(message.to_string());
+        effects
+    }
+
     /// `stop`: also leaves the error state.
     pub fn clear_error(&mut self) -> Effects {
         self.inputs.error = false;
@@ -727,6 +738,17 @@ mod tests {
         assert_eq!(m.state.error, None);
         statuses(&mut m, &load_sequence("good.mkv"));
         assert_eq!(m.state.status, Status::Playing);
+    }
+
+    #[test]
+    fn a_failure_before_mpv_is_an_error_too() {
+        let mut m = mirror();
+        m.begin_loading();
+        let effects = m.fail("file not found");
+        assert_eq!(m.state.status, Status::Error);
+        assert_eq!(effects.failed.as_deref(), Some("file not found"));
+        m.begin_loading();
+        assert_eq!(m.state.status, Status::Loading);
     }
 
     #[test]

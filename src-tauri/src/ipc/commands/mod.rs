@@ -9,7 +9,11 @@ pub mod config;
 #[cfg(debug_assertions)]
 pub mod debug;
 pub mod keybinds;
+pub mod library;
 pub mod player;
+pub mod queue;
+pub mod session;
 pub mod sub;
 pub mod tracks;
+pub mod video;
 pub mod window;

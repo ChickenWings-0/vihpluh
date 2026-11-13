@@ -69,15 +69,20 @@ pub fn list_folder(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// Replaces every folder in `sources` with its media files (non-recursive, natural order).
-/// URLs and files pass through unchanged.
+/// Local paths are made absolute in the platform's own spelling (so `C:/a/b` and `C:`
+/// are one path); URLs pass through unchanged.
 pub fn expand_sources(sources: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     for source in sources {
-        let path = Path::new(source);
-        if !crate::cli::is_url(source) && path.is_dir() {
-            out.extend(list_folder(path).into_iter().map(|p| p.display().to_string()));
-        } else {
+        if crate::cli::is_url(source) {
             out.push(source.clone());
+            continue;
+        }
+        let path = std::path::absolute(source).unwrap_or_else(|_| PathBuf::from(source));
+        if path.is_dir() {
+            out.extend(list_folder(&path).into_iter().map(|p| p.display().to_string()));
+        } else {
+            out.push(path.display().to_string());
         }
     }
     out

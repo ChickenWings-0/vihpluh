@@ -32,6 +32,22 @@ pub fn native_window_handle(window: &tauri::WebviewWindow) -> Option<isize> {
     }
 }
 
+/// Opens the system file manager with `path` selected (Windows) or its folder open (Linux).
+pub fn reveal_in_file_manager(path: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        // explorer.exe takes "/select," and the path as one argument.
+        let mut arg = std::ffi::OsString::from("/select,");
+        arg.push(path.as_os_str());
+        std::process::Command::new("explorer.exe").arg(arg).spawn().map(|_| ())
+    }
+    #[cfg(not(windows))]
+    {
+        let dir = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
+        std::process::Command::new("xdg-open").arg(dir).spawn().map(|_| ())
+    }
+}
+
 /// Whether another vihpluh is already running and will accept forwarded arguments.
 ///
 /// Mirrors the marker that `tauri-plugin-single-instance` creates on Windows (a hidden window

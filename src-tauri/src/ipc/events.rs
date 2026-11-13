@@ -6,6 +6,8 @@ pub const PLAYER_PATCH: &str = "player://patch";
 pub const PLAYER_TIME: &str = "player://time";
 /// `ResolvedKeymap` — after `keybinds.toml` changed.
 pub const KEYBINDS_CHANGED: &str = "keybinds://changed";
+/// `QueueState` — after any queue change.
+pub const QUEUE_CHANGED: &str = "queue://changed";
 /// `ConfigChanged` — one per changed setting.
 pub const CONFIG_CHANGED: &str = "config://changed";
 /// `OsdEvent` — notices that originate in the core.

@@ -6,11 +6,13 @@ pub mod cli;
 pub mod config;
 pub mod error;
 pub mod ipc;
+pub mod library;
 pub mod logging;
 pub mod media;
 pub mod paths;
 pub mod platform;
 pub mod player;
+pub mod queue;
 pub mod video;
 pub mod window;
 
@@ -39,6 +41,8 @@ pub struct AppState {
     pub config: Arc<ConfigStore>,
     pub keybinds: Arc<KeybindStore>,
     pub player: Arc<Player>,
+    /// `None` when the database could not be opened (history and resume are then off).
+    pub db: Option<Arc<library::db::Db>>,
     pub capabilities: Capabilities,
     revealed: AtomicBool,
 }
@@ -150,11 +154,30 @@ fn launch(
     // webview (the slow part of startup) are still initialising.
     let surface = video::create(&config)?;
     let capabilities = surface.capabilities();
-    let player =
-        Player::start(config.clone(), surface, &paths.default_screenshot_dir(), &cli.mpv_opts)?;
+    let db = match library::db::Db::open(&paths.data.join("vihpluh.db")) {
+        Ok(db) => Some(Arc::new(db)),
+        Err(err) => {
+            tracing::error!("the library database could not be opened ({err}); history is off");
+            None
+        }
+    };
+    let session_path = (!cli.no_session).then(|| paths.data.join("session.json"));
+    let player = Player::start(
+        config.clone(),
+        surface,
+        &paths.default_screenshot_dir(),
+        &cli.mpv_opts,
+        db.clone(),
+        session_path.clone(),
+    )?;
     let sources = media::files::expand_sources(&cli.sources);
     if !sources.is_empty() {
         player.open_cli(sources, cli.start, cli.paused, OpenMode::Replace);
+    } else if config.general.restore_session {
+        // Nothing on the command line: bring back last time's queue, paused (§9.4).
+        if let Some(saved) = session_path.as_deref().and_then(queue::session::load) {
+            player.restore_session(saved);
+        }
     }
 
     let keybinds = KeybindStore::open(paths.config.join("keybinds.toml"));
@@ -163,6 +186,7 @@ fn launch(
         config: store,
         keybinds,
         player,
+        db,
         capabilities,
         revealed: AtomicBool::new(false),
     };
@@ -211,6 +235,8 @@ macro_rules! commands {
             ipc::commands::player::player_screenshot,
             ipc::commands::player::player_mpv_command,
             ipc::commands::app::app_pick_media,
+            ipc::commands::app::app_reveal,
+            ipc::commands::video::video_set_margins,
             ipc::commands::tracks::tracks_select,
             ipc::commands::audio::audio_set_delay,
             ipc::commands::sub::sub_set_delay,
@@ -225,6 +251,21 @@ macro_rules! commands {
             ipc::commands::window::window_minimize,
             ipc::commands::window::window_toggle_maximize,
             ipc::commands::window::window_close,
+            ipc::commands::queue::queue_snapshot,
+            ipc::commands::queue::queue_add,
+            ipc::commands::queue::queue_remove,
+            ipc::commands::queue::queue_move,
+            ipc::commands::queue::queue_clear,
+            ipc::commands::queue::queue_play,
+            ipc::commands::queue::queue_next,
+            ipc::commands::queue::queue_prev,
+            ipc::commands::queue::queue_set_repeat,
+            ipc::commands::queue::queue_set_shuffle,
+            ipc::commands::queue::queue_set_stop_after_current,
+            ipc::commands::library::library_recent,
+            ipc::commands::library::library_clear_history,
+            ipc::commands::session::session_ui_get,
+            ipc::commands::session::session_ui_set,
             $($extra),*
         ]
     };

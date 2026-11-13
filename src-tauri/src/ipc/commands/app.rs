@@ -37,6 +37,18 @@ impl From<tauri::Error> for AppError {
     }
 }
 
+/// Shows a file selected in the system file manager (or its folder, where selecting is not
+/// possible). Runs the file manager as a separate process; nothing waits for it.
+#[tauri::command(async)]
+pub fn app_reveal(path: String) -> AppResult<()> {
+    let target = std::path::PathBuf::from(&path);
+    if !target.exists() {
+        return Err(AppError::not_found(format!("{path} no longer exists")));
+    }
+    crate::platform::reveal_in_file_manager(&target)
+        .map_err(|e| AppError::internal(format!("could not open the file manager: {e}")))
+}
+
 #[derive(Debug, Clone, Copy, serde::Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]

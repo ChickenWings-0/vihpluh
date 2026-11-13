@@ -381,6 +381,10 @@ pub struct OsdEvent {
 pub struct OsdAction {
     pub label: String,
     pub action_id: String,
+    /// Arguments for parameterised actions (KEYBINDS_AND_CONFIG §3.4).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "Record<string, unknown>")]
+    pub args: Option<serde_json::Value>,
 }
 
 impl OsdEvent {

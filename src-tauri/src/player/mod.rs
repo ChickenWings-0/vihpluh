@@ -7,6 +7,7 @@
 //! [`Player`]: simple property writes go straight to mpv (asynchronously) and come back as
 //! events; anything that needs policy goes through the core.
 
+mod flow;
 pub mod hwdec;
 pub mod mpv;
 pub mod observe;
@@ -14,6 +15,7 @@ pub mod options;
 pub mod state;
 pub mod tracks;
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -25,15 +27,19 @@ use tauri::{AppHandle, Emitter};
 use ts_rs::TS;
 
 use crate::config::Config;
-use crate::config::schema::AtQueueEnd;
 use crate::ipc::dto::{
     AbLoop, Direction, OpenRequest, OsdEvent, OsdKind, PlayerState, SeekKind, SeekRequest, Status,
     TimeEvent, TrackSlot,
 };
 use crate::ipc::events;
+use crate::library::db::Db;
 use crate::platform::media::{MediaCommand, MediaSession, NowPlaying};
 use crate::platform::power::{self, Inhibitor};
+use crate::queue::session::{Session, UiPatch, UiState};
+use crate::queue::{Queue, QueueState};
 use crate::video::VideoSurface;
+pub use flow::QueueOp;
+use flow::{Current, Pending, Prepared};
 use mpv::{Event, Mpv, MpvError, Value};
 use state::{Effects, Mirror};
 
@@ -68,6 +74,11 @@ enum CoreMsg {
     /// The app and window exist: start media controls. Carries the window handle.
     Attached(Option<isize>),
     ConfigChanged(Arc<Config>),
+    Queue(QueueOp),
+    /// The off-thread part of a load finished (identity + history).
+    Prepared(Box<Prepared>),
+    Ui(UiPatch),
+    Restore(Box<Session>),
     Shutdown,
 }
 
@@ -112,6 +123,8 @@ pub struct Player {
     /// The latest `PlayerState`, shared with the core for `player_snapshot`.
     snapshot: Arc<RwLock<PlayerState>>,
     max_volume: Arc<RwLock<f64>>,
+    queue_snapshot: Arc<RwLock<QueueState>>,
+    ui: Arc<RwLock<UiState>>,
 }
 
 /// The screenshot folder used when `general.screenshot_dir` is empty (see
@@ -129,6 +142,8 @@ impl Player {
         surface: Arc<dyn VideoSurface>,
         default_screenshot_dir: &std::path::Path,
         cli_mpv_opts: &[(String, String)],
+        db: Option<Arc<Db>>,
+        session_path: Option<PathBuf>,
     ) -> Result<Arc<Self>, PlayerError> {
         let _ = DEFAULT_SCREENSHOT_DIR.set(default_screenshot_dir.display().to_string());
         let caps = surface.capabilities();
@@ -178,6 +193,13 @@ impl Player {
         let mirror = Mirror::new(&config);
         let snapshot = Arc::new(RwLock::new(mirror.state.clone()));
         let max_volume = Arc::new(RwLock::new(f64::from(config.audio.max_volume)));
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0x5eed);
+        let queue = Queue::new(seed);
+        let queue_snapshot = Arc::new(RwLock::new(queue.state()));
+        let ui = Arc::new(RwLock::new(UiState::default()));
         let core = {
             let mut core = Core {
                 app: app.clone(),
@@ -199,6 +221,17 @@ impl Player {
                 software_notice_shown: false,
                 inhibitor: Inhibitor::new(),
                 media: None,
+                queue,
+                queue_snapshot: queue_snapshot.clone(),
+                queue_rev: u64::MAX,
+                db,
+                generation: 0,
+                pending: None,
+                current: None,
+                last_position_save: Instant::now(),
+                session_path,
+                session_due: None,
+                ui: ui.clone(),
             };
             std::thread::Builder::new()
                 .name("core".into())
@@ -217,6 +250,8 @@ impl Player {
             app,
             snapshot,
             max_volume,
+            queue_snapshot,
+            ui,
         }))
     }
 
@@ -292,6 +327,30 @@ impl Player {
         self.send(CoreMsg::Open(request, None));
     }
 
+    pub fn queue(&self, op: QueueOp) {
+        self.send(CoreMsg::Queue(op));
+    }
+
+    pub fn queue_state(&self) -> QueueState {
+        match self.queue_snapshot.read() {
+            Ok(state) => state.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+
+    pub fn ui_state(&self) -> UiState {
+        self.ui.read().map(|ui| ui.clone()).unwrap_or_default()
+    }
+
+    pub fn set_ui(&self, patch: UiPatch) {
+        self.send(CoreMsg::Ui(patch));
+    }
+
+    /// Puts back last session's queue and loads its current item, paused (§9.4).
+    pub fn restore_session(&self, session: Session) {
+        self.send(CoreMsg::Restore(Box::new(session)));
+    }
+
     /// Opens what the command line named (first launch or a forwarded second launch).
     pub fn open_cli(
         &self,
@@ -358,6 +417,21 @@ impl Player {
         let text = |p: Option<f64>| p.map_or_else(|| "no".to_string(), |v| format!("{v}"));
         self.set("ab-loop-a", Value::Text(text(points.a)))?;
         self.set("ab-loop-b", Value::Text(text(points.b)))
+    }
+
+    /// Shrinks the picture so a docked panel never covers it (ARCHITECTURE §5.1, D5).
+    pub fn set_margins(
+        &self,
+        left: f64,
+        right: f64,
+        top: f64,
+        bottom: f64,
+    ) -> Result<(), MpvError> {
+        let clamp = |v: f64| if v.is_finite() { v.clamp(0.0, 0.9) } else { 0.0 };
+        self.set("video-margin-ratio-left", Value::Double(clamp(left)))?;
+        self.set("video-margin-ratio-right", Value::Double(clamp(right)))?;
+        self.set("video-margin-ratio-top", Value::Double(clamp(top)))?;
+        self.set("video-margin-ratio-bottom", Value::Double(clamp(bottom)))
     }
 
     pub fn set_audio_delay(&self, ms: i32) -> Result<(), MpvError> {
@@ -514,6 +588,20 @@ struct Core {
     software_notice_shown: bool,
     inhibitor: Inhibitor,
     media: Option<MediaSession>,
+    queue: Queue,
+    queue_snapshot: Arc<RwLock<QueueState>>,
+    /// The queue revision last emitted.
+    queue_rev: u64,
+    db: Option<Arc<Db>>,
+    /// Increases with every load; stale off-thread results are ignored.
+    generation: u64,
+    pending: Option<Pending>,
+    current: Option<Current>,
+    last_position_save: Instant,
+    /// `None` with `--no-session`.
+    session_path: Option<PathBuf>,
+    session_due: Option<Instant>,
+    ui: Arc<RwLock<UiState>>,
 }
 
 impl Core {
@@ -524,8 +612,12 @@ impl Core {
                 Ok(message) => self.handle(message),
                 Err(RecvTimeoutError::Timeout) => {}
             }
+            self.tick();
             self.flush();
         }
+        // Last words: where we were, for resume and for the next session.
+        self.save_progress();
+        self.write_session();
         self.inhibitor.set(power::Wake::None);
     }
 
@@ -533,6 +625,9 @@ impl Core {
     fn next_wait(&self) -> Duration {
         let now = Instant::now();
         let mut wait = IDLE_TICK;
+        if let Some(due) = self.session_due {
+            wait = wait.min(due.saturating_duration_since(now));
+        }
         if self.dirty {
             wait = wait.min((self.last_patch + PATCH_INTERVAL).saturating_duration_since(now));
         }
@@ -554,6 +649,10 @@ impl Core {
             CoreMsg::Media(command) => self.on_media_command(command),
             CoreMsg::Attached(window_handle) => self.on_attached(window_handle),
             CoreMsg::ConfigChanged(config) => self.on_config_changed(config),
+            CoreMsg::Queue(op) => self.queue_op(op),
+            CoreMsg::Prepared(prepared) => self.on_prepared(prepared),
+            CoreMsg::Ui(patch) => self.set_ui(patch),
+            CoreMsg::Restore(session) => self.restore_session(*session),
             CoreMsg::Shutdown => {}
         }
     }
@@ -577,7 +676,7 @@ impl Core {
         if effects.loaded {
             self.software_notice_shown = false;
         }
-        if let Some(reason) = effects.failed {
+        if let Some(reason) = &effects.failed {
             let name = self.mirror.state.media.as_ref().map(|m| m.title.clone());
             let text = match name {
                 Some(name) if !name.is_empty() => format!("Can't play {name}: {reason}"),
@@ -602,62 +701,30 @@ impl Core {
             _ => {}
         }
         let before_hwdec = self.mirror.state.hwdec.clone();
+        let was_paused = self.mirror.inputs().pause;
         let effects = self.mirror.on_event(event);
-        self.apply(effects);
+        if effects.failed.is_some() {
+            self.apply_failure(effects);
+        } else {
+            self.apply(effects);
+        }
         if self.mirror.state.hwdec != before_hwdec {
             self.on_hwdec_changed();
         }
-    }
-
-    // ── Policy ──────────────────────────────────────────────────────────────
-
-    /// Replaces what is playing with the first source. (The queue arrives in Phase 4;
-    /// until then `enqueue` / `play_next` behave like `replace`.)
-    fn open(&mut self, request: &OpenRequest, start: Option<String>) {
-        let Some(source) = request.sources.first() else { return };
-        let paused = request.paused.unwrap_or(!self.config.playback.autoplay);
-        self.set_property("pause", Value::Flag(paused));
-        match start.or_else(|| request.start_at.map(|s| format!("{s}"))) {
-            // loadfile <url> <flags> <index> <options>
-            Some(start) => {
-                let options = format!("start={start}");
-                self.run_command(&["loadfile", source, "replace", "-1", &options]);
+        match event {
+            Event::FileLoaded => self.on_file_loaded(),
+            // Save where we are on pause and after a seek (not during a drag: debounced).
+            Event::PlaybackRestart
+                if self.last_position_save.elapsed() >= Duration::from_secs(1) =>
+            {
+                self.save_progress();
             }
-            None => self.run_command(&["loadfile", source, "replace"]),
-        }
-        let effects = self.mirror.begin_loading();
-        self.apply(effects);
-    }
-
-    fn stop(&mut self) {
-        self.run_command(&["stop"]);
-        let effects = self.mirror.clear_error();
-        self.apply(effects);
-    }
-
-    /// `None` toggles. Pressing play on a finished file starts it over.
-    fn set_paused(&mut self, paused: Option<bool>) {
-        let inputs = self.mirror.inputs();
-        let paused = paused.unwrap_or(!inputs.pause);
-        if !paused && inputs.eof {
-            self.run_command(&["seek", "0", "absolute+exact"]);
-        }
-        self.set_property("pause", Value::Flag(paused));
-    }
-
-    /// The file reached its end. With no queue yet, the queue is always exhausted here.
-    fn on_ended(&mut self) {
-        match self.config.playback.at_queue_end {
-            AtQueueEnd::Hold => {
-                let effects = self.mirror.hold_at_end();
-                self.apply(effects);
+            Event::PropertyChange { name, .. }
+                if name == "pause" && self.mirror.inputs().pause && !was_paused =>
+            {
+                self.save_progress();
             }
-            AtQueueEnd::Stop => self.run_command(&["stop"]),
-            AtQueueEnd::Quit => {
-                if let Some(app) = self.app.get() {
-                    app.exit(0);
-                }
-            }
+            _ => {}
         }
     }
 
@@ -694,8 +761,8 @@ impl Core {
             MediaCommand::SeekBy(delta) => {
                 self.run_command(&["seek", &format!("{delta}"), "relative+exact"]);
             }
-            // Next / Previous belong to the queue (Phase 4).
-            MediaCommand::Next | MediaCommand::Previous => {}
+            MediaCommand::Next => self.queue_op(QueueOp::Next),
+            MediaCommand::Previous => self.queue_op(QueueOp::Previous),
         }
     }
 
