@@ -52,6 +52,8 @@ pub(super) struct Prepared {
     media_key: Option<String>,
     history: Option<HistoryEntry>,
     sub_links: Vec<SubLink>,
+    /// HTTP headers a stream list gave for this URL: `(user_agent, referrer)`.
+    headers: Option<(Option<String>, Option<String>)>,
 }
 
 /// What the core remembers about the file that is loaded.
@@ -210,6 +212,7 @@ impl Core {
 
         let generation = self.generation;
         let source = item.source.clone();
+        let is_url = item.is_url;
         let db = if self.history_enabled() { self.db.clone() } else { None };
         let links_db = self.db.clone();
         let tx = self.tx.clone();
@@ -242,7 +245,15 @@ impl Core {
                 }
                 _ => Vec::new(),
             };
-            let prepared = Prepared { generation, media_key, history, sub_links };
+            // A channel from a stream list plays with the headers its list named (§8.3).
+            let headers = match (&links_db, is_url) {
+                (Some(db), true) => {
+                    let url = source.clone();
+                    db.call(move |c| crate::library::iptv::headers_for(c, &url)).ok().flatten()
+                }
+                _ => None,
+            };
+            let prepared = Prepared { generation, media_key, history, sub_links, headers };
             let _ = tx.send(CoreMsg::Prepared(Box::new(prepared)));
         });
         if let Err(err) = spawned {
@@ -252,6 +263,7 @@ impl Core {
                 media_key: None,
                 history: None,
                 sub_links: Vec::new(),
+                headers: None,
             }));
         }
     }
@@ -288,13 +300,24 @@ impl Core {
         self.set_property("pause", Value::Flag(paused));
         let effects = self.mirror.expect_media(&item.source, prepared.media_key.clone());
         self.apply(effects);
-        match &start {
-            // loadfile <url> <flags> <index> <options>
-            Some(start) => {
-                let options = format!("start={start}");
-                self.run_command(&["loadfile", &item.source, "replace", "-1", &options]);
+        let mut options: Vec<(&str, String)> = Vec::new();
+        if let Some(start) = &start {
+            options.push(("start", start.clone()));
+        }
+        if let Some((user_agent, referrer)) = &prepared.headers {
+            if let Some(agent) = user_agent {
+                options.push(("user-agent", agent.clone()));
             }
-            None => self.run_command(&["loadfile", &item.source, "replace"]),
+            if let Some(referrer) = referrer {
+                options.push(("referrer", referrer.clone()));
+            }
+        }
+        if options.is_empty() {
+            self.run_command(&["loadfile", &item.source, "replace"]);
+        } else {
+            // loadfile <url> <flags> <index> <options>
+            let options = file_options(&options);
+            self.run_command(&["loadfile", &item.source, "replace", "-1", &options]);
         }
 
         if let (Some(db), Some(key)) =
@@ -562,6 +585,16 @@ impl Core {
     }
 }
 
+/// Per-file options for `loadfile`, as mpv's `key=value,key=value` list. Values are
+/// length-prefixed (`%n%…`), so commas, quotes, and spaces in a user agent pass through.
+pub(super) fn file_options(options: &[(&str, String)]) -> String {
+    options
+        .iter()
+        .map(|(name, value)| format!("{name}=%{}%{value}", value.len()))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 /// `m:ss` or `h:mm:ss`, as the UI shows times (DESIGN_SYSTEM §7.4).
 pub(super) fn format_clock(seconds: f64) -> String {
     let total = if seconds.is_finite() && seconds > 0.0 { seconds as u64 } else { 0 };
@@ -651,6 +684,14 @@ mod tests {
         assert_eq!(match_track(&tracks, TrackKind::Audio, &memory(None, None, 3)), Some(3));
         assert_eq!(match_track(&tracks, TrackKind::Audio, &memory(Some("fre"), None, 9)), None);
         assert_eq!(match_track(&tracks, TrackKind::Sub, &memory(Some("eng"), None, 1)), None);
+    }
+
+    #[test]
+    fn per_file_options_survive_commas_and_spaces() {
+        let options =
+            [("start", "98.5".to_string()), ("user-agent", "Agent/1.0 (X11, Linux) é".to_string())];
+        // The length is in bytes, as mpv counts it.
+        assert_eq!(file_options(&options), "start=%4%98.5,user-agent=%25%Agent/1.0 (X11, Linux) é");
     }
 
     #[test]

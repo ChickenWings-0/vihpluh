@@ -22,5 +22,7 @@ pub const MEDIA_CUES: &str = crate::subtitles::CUES_EVENT;
 pub const BOOKMARKS_CHANGED: &str = "bookmarks://changed";
 /// No payload — the set of presets changed (`preset_list` again).
 pub const PRESETS_CHANGED: &str = "presets://changed";
+/// `ScanProgress` — a library folder is being scanned (4 Hz, and once when done).
+pub const LIBRARY_SCAN: &str = "library://scan";
 /// `DebugStats` — development overlay only.
 pub const DEBUG_STATS: &str = "debug://stats";

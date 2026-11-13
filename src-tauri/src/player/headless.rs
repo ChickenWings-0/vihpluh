@@ -148,3 +148,102 @@ pub fn decode_pcm(
         }
     }
 }
+
+/// Reads durations for the library (§8.2), one file after another on one handle: nothing is
+/// decoded or shown, the file is only opened far enough for the demuxer to report its length.
+pub struct DurationProbe {
+    mpv: Mpv,
+}
+
+impl DurationProbe {
+    pub fn new() -> MpvResult<Self> {
+        let mpv = handle(&[
+            ("vo", "null"),
+            ("ao", "null"),
+            ("vid", "no"),
+            ("aid", "no"),
+            ("sid", "no"),
+            ("pause", "yes"),
+            ("cache", "no"),
+            ("demuxer-readahead-secs", "0"),
+            ("idle", "yes"),
+        ])?;
+        Ok(Self { mpv })
+    }
+
+    /// The file's duration in seconds, or `None` when it cannot be opened or does not say.
+    pub fn duration(&self, source: &str) -> Option<f64> {
+        self.mpv.command(&["loadfile", source]).ok()?;
+        let loaded = wait_loaded(&self.mpv, Duration::from_secs(5));
+        let duration = loaded.ok().and_then(|()| self.mpv.get_f64("duration"));
+        let _ = self.mpv.command(&["stop"]);
+        duration.filter(|d| d.is_finite() && *d > 0.0)
+    }
+}
+
+/// Downloads a URL to a file through mpv's own network stack (`stream-dump`), so stream
+/// lists need no HTTP client of their own and follow the same proxy and user-agent settings
+/// as playback. `options` are extra mpv options (`user-agent`, `http-proxy`, …).
+pub fn fetch_url(
+    url: &str,
+    dest: &std::path::Path,
+    options: &[(String, String)],
+    limit: Duration,
+) -> MpvResult<()> {
+    let dest_text = dest.display().to_string();
+    let mut all: Vec<(&str, &str)> =
+        vec![("vo", "null"), ("ao", "null"), ("stream-dump", &dest_text), ("cache", "no")];
+    all.extend(options.iter().map(|(name, value)| (name.as_str(), value.as_str())));
+    let mpv = handle(&all)?;
+    mpv.command(&["loadfile", url])?;
+    let deadline = Instant::now() + limit;
+    while Instant::now() < deadline {
+        match mpv.wait_event(0.1) {
+            Event::EndFile { reason: EndReason::Error, error } => {
+                return Err(MpvError::Api {
+                    code: -1,
+                    message: error.unwrap_or_else(|| "the download failed".into()),
+                });
+            }
+            // A finished dump ends the "file" (as end of file, or as a stop).
+            Event::EndFile { .. } => return Ok(()),
+            Event::Shutdown => return Err(MpvError::Create),
+            _ => {}
+        }
+    }
+    Err(timeout("the download"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A stream list is fetched as bytes, whatever it is: here a local file through `file://`.
+    #[test]
+    fn stream_dump_copies_a_source_to_a_file() {
+        let dir = std::env::temp_dir().join(format!("vihpluh-fetch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("list.m3u");
+        std::fs::write(&source, "#EXTM3U\n#EXTINF:-1,One\nhttp://example.com/1\n").unwrap();
+        let dest = dir.join("copy.m3u");
+        fetch_url(&source.display().to_string(), &dest, &[], Duration::from_secs(10)).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&dest).unwrap(),
+            "#EXTM3U\n#EXTINF:-1,One\nhttp://example.com/1\n"
+        );
+        let missing = dir.join("nope.m3u").display().to_string();
+        assert!(fetch_url(&missing, &dest, &[], Duration::from_secs(10)).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_that_is_not_media_has_no_duration() {
+        let path = std::env::temp_dir().join(format!("vihpluh-probe-{}.mkv", std::process::id()));
+        std::fs::write(&path, b"not a video").unwrap();
+        let probe = DurationProbe::new().unwrap();
+        assert_eq!(probe.duration(&path.display().to_string()), None);
+        assert_eq!(probe.duration("Z:/missing.mkv"), None);
+        let _ = std::fs::remove_file(&path);
+    }
+}

@@ -52,6 +52,9 @@ pub struct AppState {
     pub waveform: media::waveform::WaveformService,
     pub cues: Arc<subtitles::CueIndex>,
     pub presets: Arc<presets::PresetStore>,
+    /// `None` without a database.
+    pub library: Option<Arc<library::Library>>,
+    pub playlists: library::playlists::PlaylistStore,
     revealed: AtomicBool,
 }
 
@@ -199,6 +202,15 @@ fn launch(
     }
 
     let keybinds = KeybindStore::open(paths.config.join("keybinds.toml"));
+    let library =
+        db.as_ref().and_then(|db| match library::Library::new(db.clone(), store.clone()) {
+            Ok(library) => Some(library),
+            Err(err) => {
+                tracing::error!("the library scanner could not start: {err}");
+                None
+            }
+        });
+    let playlists = library::playlists::PlaylistStore::new(paths.config.join("playlists"));
     let thumbs = media::thumbs::ThumbService::start(paths.cache.clone())?;
     let waveform = media::waveform::WaveformService::new(paths.cache.clone(), player.clone());
     start_cache_janitor(paths.cache.clone(), store.clone());
@@ -214,6 +226,8 @@ fn launch(
         waveform,
         cues,
         presets: preset_store,
+        library,
+        playlists,
         revealed: AtomicBool::new(false),
     };
     let mut builder = tauri::Builder::default();
@@ -328,6 +342,26 @@ macro_rules! commands {
             ipc::commands::queue::queue_set_stop_after_current,
             ipc::commands::library::library_recent,
             ipc::commands::library::library_clear_history,
+            ipc::commands::library::library_folders,
+            ipc::commands::library::library_add_folder,
+            ipc::commands::library::library_remove_folder,
+            ipc::commands::library::library_rescan,
+            ipc::commands::library::library_query,
+            ipc::commands::library::library_browse,
+            ipc::commands::playlist::playlist_list,
+            ipc::commands::playlist::playlist_get,
+            ipc::commands::playlist::playlist_save,
+            ipc::commands::playlist::playlist_delete,
+            ipc::commands::playlist::playlist_add_items,
+            ipc::commands::playlist::playlist_import_m3u,
+            ipc::commands::playlist::playlist_export_m3u,
+            ipc::commands::playlist::queue_save_as_playlist,
+            ipc::commands::streams::streams_sources,
+            ipc::commands::streams::streams_add_source,
+            ipc::commands::streams::streams_refresh,
+            ipc::commands::streams::streams_remove_source,
+            ipc::commands::streams::streams_groups,
+            ipc::commands::streams::streams_list,
             ipc::commands::session::session_ui_get,
             ipc::commands::session::session_ui_set,
             $($extra),*
@@ -399,6 +433,16 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     });
     if let Err(err) = state.config.watch() {
         tracing::warn!("config.toml will not be reloaded automatically: {err}");
+    }
+
+    // The library: scan progress goes to the drawer; folders are watched from here on and,
+    // with `library.scan_on_startup`, scanned once now (on the scan thread).
+    if let Some(library) = &state.library {
+        let handle = app.handle().clone();
+        library.on_scan(move |progress| {
+            let _ = handle.emit(events::LIBRARY_SCAN, progress);
+        });
+        library.start();
     }
 
     // Presets: a change (a save, or an edit in another program) re-applies to what is
@@ -517,6 +561,9 @@ fn shutdown(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
         state.thumbs.shutdown();
         state.waveform.cancel();
+        if let Some(library) = &state.library {
+            library.shutdown();
+        }
         state.player.shutdown();
     }
 }

@@ -57,6 +57,8 @@ pub enum PickKind {
     Folder,
     /// One or more subtitle files to add to what is playing.
     Subtitles,
+    /// An `.m3u` / `.m3u8` list (a playlist to import, or a stream list).
+    Playlist,
 }
 
 /// Shows the native "open" dialog and returns what was chosen (empty when cancelled).
@@ -86,6 +88,13 @@ pub fn app_pick_media(window: WebviewWindow, kind: PickKind) -> Vec<String> {
             .add_filter("All files", &["*"])
             .blocking_pick_files()
             .unwrap_or_default(),
+        PickKind::Playlist => dialog
+            .set_title("Open playlist")
+            .add_filter("Playlists", &["m3u", "m3u8"])
+            .add_filter("All files", &["*"])
+            .blocking_pick_file()
+            .into_iter()
+            .collect(),
     };
     picked
         .into_iter()

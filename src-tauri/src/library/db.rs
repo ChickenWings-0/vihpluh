@@ -7,7 +7,10 @@ use std::sync::mpsc::{self, Sender};
 use rusqlite::Connection;
 
 /// Numbered migrations, applied in order; `PRAGMA user_version` records the last one applied.
-const MIGRATIONS: &[(&str, &str)] = &[("0001_init", include_str!("migrations/0001_init.sql"))];
+const MIGRATIONS: &[(&str, &str)] = &[
+    ("0001_init", include_str!("migrations/0001_init.sql")),
+    ("0002_library_index", include_str!("migrations/0002_library_index.sql")),
+];
 
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {

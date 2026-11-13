@@ -56,7 +56,12 @@ pub fn glob_matches(pattern: &str, text: &str) -> bool {
                 // `**/` also matches no directory at all.
                 let rest = &p[2..];
                 let rest_no_slash = rest.strip_prefix(&['/']).unwrap_or(rest);
-                (0..=t.len()).any(|i| go(rest, &t[i..]) || go(rest_no_slash, &t[i..]))
+                // …but only where a path segment starts: `**/.*` is "a name starting with a
+                // dot", not "anything with a dot in it".
+                (0..=t.len()).any(|i| {
+                    let segment_start = i == 0 || t[i - 1] == '/';
+                    go(rest, &t[i..]) || (segment_start && go(rest_no_slash, &t[i..]))
+                })
             }
             Some('*') => {
                 let limit = t.iter().position(|c| *c == '/').unwrap_or(t.len());
@@ -231,6 +236,13 @@ mod tests {
         assert!(!glob_matches("d:/anime/*/e??.mkv", "D:/Anime/Show/S1/e01.mkv"));
         assert!(!glob_matches("d:/anime/*.mkv", "D:/Anime/Show/e01.mkv"));
         assert!(glob_matches("**", "anything/at/all"));
+        // The shipped ignore patterns: dot-names and anything with "sample" in its name.
+        assert!(glob_matches("**/.*", "D:/Media/.hidden"));
+        assert!(glob_matches("**/.*", ".git"));
+        assert!(!glob_matches("**/.*", "D:/Media/Show S01E01.mkv"));
+        assert!(!glob_matches("**/.*", "D:/Media/a.b/c"));
+        assert!(glob_matches("**/*sample*", "D:/Media/Show/Sample-clip.mkv"));
+        assert!(!glob_matches("**/*sample*", "D:/Samples/Show/clip.mkv"));
         assert!(!glob_matches("", "x"));
     }
 
