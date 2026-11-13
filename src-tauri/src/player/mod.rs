@@ -10,6 +10,7 @@
 mod audio;
 pub mod equalizer;
 mod flow;
+pub mod headless;
 pub mod hwdec;
 mod inspector;
 pub mod mpv;
@@ -349,6 +350,15 @@ impl Player {
         match self.snapshot.read() {
             Ok(state) => state.clone(),
             Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+
+    /// What is loaded now, without the time resync `snapshot` triggers (for media services
+    /// polled at hover rate).
+    pub fn current_media(&self) -> Option<crate::ipc::dto::MediaInfo> {
+        match self.snapshot.read() {
+            Ok(state) => state.media.clone(),
+            Err(poisoned) => poisoned.into_inner().media.clone(),
         }
     }
 

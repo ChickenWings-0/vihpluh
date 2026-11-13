@@ -2,7 +2,7 @@
  * The only module that imports `@tauri-apps/api` (ARCHITECTURE §4.5). Everything else talks to
  * the core through `commands.ts` and `events.ts`, which keeps the transport swappable.
  */
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -95,4 +95,21 @@ export function onFileDrop(handler: (event: DropEvent) => void): Unlisten {
     cancelled = true;
     unlisten?.();
   };
+}
+
+// ── Custom URI schemes (ARCHITECTURE §7.5) ─────────────────────────────────────────────────
+
+let thumbBase: string | null = null;
+
+/**
+ * URL of a seek-preview thumbnail. The webview spells custom schemes differently per platform
+ * (`http://vthumb.localhost/` on Windows, `vthumb://localhost/` elsewhere); `convertFileSrc`
+ * knows which, so its prefix is reused.
+ */
+export function thumbUrl(mediaKey: string, step: number, bucket: number): string {
+  if (thumbBase === null) {
+    const probe = convertFileSrc("x", "vthumb");
+    thumbBase = probe.slice(0, probe.length - 1);
+  }
+  return `${thumbBase}${encodeURIComponent(mediaKey)}/${step}/${bucket}.jpg`;
 }

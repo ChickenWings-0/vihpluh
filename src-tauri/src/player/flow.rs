@@ -262,6 +262,8 @@ impl Core {
         }
 
         self.set_property("pause", Value::Flag(paused));
+        let effects = self.mirror.expect_media(&item.source, prepared.media_key.clone());
+        self.apply(effects);
         match &start {
             // loadfile <url> <flags> <index> <options>
             Some(start) => {

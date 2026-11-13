@@ -10,6 +10,7 @@ pub mod config;
 pub mod debug;
 pub mod keybinds;
 pub mod library;
+pub mod media;
 pub mod player;
 pub mod queue;
 pub mod session;

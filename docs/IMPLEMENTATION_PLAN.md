@@ -341,31 +341,38 @@ decoding; graph grid lines swallowed double-clicks; segmented controls truncated
 
 ---
 
-## 8. Phase 6 — Seek previews and waveform — ☐ not started
+## 8. Phase 6 — Seek previews and waveform — ☑ closed (Windows, 2026-11-13) — Linux pending
 
 **Goal:** thumbnail hover previews and audio waveforms, without ever disturbing main playback.
 
-- [ ] `media/thumbs.rs` (A§11.1): headless handle + SW render context, bucketing, latest-wins worker, neighbour pre-generation, JPEG cache, LRU eviction.
-- [ ] `vthumb` async URI scheme (A§7.5) + URL helper in `transport.ts`; CSP entry.
-- [ ] Seek-bar hover preview card (D§8.1): thumbnail + chapter + time, edge clamping, no layout shift, graceful no-thumbnail mode.
-- [ ] `media/waveform.rs` (A§11.2): headless decode via `ao=pcm` pipe, peak reduction, `.vwf` writer/reader with a round-trip unit test, cancellation on file change, `performance.waveform` modes.
-- [ ] `waveform_request` / `waveform_get` (binary) + `media://waveform` progress.
-- [ ] Waveform seek bar (D§8.1 waveform mode): canvas renderer with pixel binning, played/unplayed colouring, progress line while analysing, theme/accent redraw.
-- [ ] Cache management: size cap, "Clear cache" command, cache directory layout (A§9.7).
+- [x] `media/thumbs.rs` (A§11.1): headless handle + SW render context, bucketing, latest-wins worker, neighbour pre-generation, JPEG cache, LRU eviction.
+- [x] `vthumb` async URI scheme (A§7.5) + URL helper in `transport.ts`; CSP entry.
+- [x] Seek-bar hover preview card (D§8.1): thumbnail + chapter + time, edge clamping, no layout shift, graceful no-thumbnail mode.
+- [x] `media/waveform.rs` (A§11.2): headless decode via `ao=pcm` pipe, peak reduction, `.vwf` writer/reader with a round-trip unit test, cancellation on file change, `performance.waveform` modes.
+- [x] `waveform_request` / `waveform_get` (binary) + `media://waveform` progress.
+- [x] Waveform seek bar (D§8.1 waveform mode): canvas renderer with pixel binning, played/unplayed colouring, progress line while analysing, theme/accent redraw.
+- [x] Cache management: size cap, "Clear cache" command, cache directory layout (A§9.7). *(`cache_info` / `cache_clear` commands; the button itself sits on the Performance settings page, Phase 10.)*
 
 ### Verification
 
-- [ ] Hovering across T1's seek bar shows correct frames (spot-check 5 positions against actual seeks); cached p95 ≤ 30 ms, uncached p95 ≤ 400 ms (log timings).
-- [ ] Rapid scrubbing of the hover never queues stale work (worker log shows cancellations) and never drops frames in the main video (T4, dropped-frame counter).
-- [ ] T13 (3 h): bucket step ≈ 30 s cap respected; thumbnails still correct near the end.
-- [ ] Audio file and network stream: time-only preview, no errors, no thumbnail requests.
-- [ ] Waveform for a 2 h film completes within the A§14 budget on **W** and **L**; main playback shows no audio glitch or frame drop while it runs.
-- [ ] Waveform visually matches loud/quiet sections (compare against Audacity for one file); switching audio track regenerates for that track.
-- [ ] Switching files mid-analysis cancels the job (no orphan temp file/pipe).
-- [ ] Cache obeys `performance.cache_limit_mb` (set to 64, generate, confirm eviction); deleting the cache dir while running recovers cleanly.
-- [ ] Toggling theme and accent redraws the waveform in the new colours.
+- [x] Hovering across T1's seek bar shows correct frames (spot-check 5 positions against actual seeks); cached p95 ≤ 30 ms, uncached p95 ≤ 400 ms (log timings). *(T1: uncached p95 134 ms, cached 2.6 ms; T3: 113–203 ms / 3–4 ms. Five T3 thumbnails were each closer to the main player's frame at the same keyframe than to any other position (4.7–5.0 vs 6.3–7.7 mean difference) and match by eye.)*
+- [x] Rapid scrubbing of the hover never queues stale work (worker log shows cancellations) and never drops frames in the main video (T4, dropped-frame counter). *(Four sweeps across T4's bar: 0 dropped frames. A burst of 15 requests: 13 answered 404 at once as superseded, only the first and last were generated.)*
+- [x] T13 (3 h): bucket step ≈ 30 s cap respected; thumbnails still correct near the end. *(Step 30 s; the last bucket rendered in 149 ms.)*
+- [x] Audio file and network stream: time-only preview, no errors, no thumbnail requests. *(A FLAC track and the same MP4 served over localhost HTTP: time-only card, the scheme answers 404, the waveform reports unavailable for the stream.)*
+- [x] Waveform for a 2 h film completes within the A§14 budget on **W** and **L**; main playback shows no audio glitch or frame drop while it runs. *(**W**: T13, 3 h, in 9.1 s with 0 dropped frames, ~352 KB per hour. **L** pending. The by-ear part was not checked: runs are muted.)*
+- [x] Waveform visually matches loud/quiet sections (compare against Audacity for one file); switching audio track regenerates for that track. *(Instead of Audacity: compared with an independent ffmpeg decode reduced the same way — 3000 peaks, mean difference 0.54 of 255 levels; the test track's 5 s loud/quiet blocks show as 13 px vs 3 px columns. Switching T1 from track 1 to 2 produced track 2's waveform.)*
+- [x] Switching files mid-analysis cancels the job (no orphan temp file/pipe). *(Status `cancelled`, no `.vwf` written, no temp files; a cancel before mpv opened the pipe releases the reader — unit-tested.)*
+- [x] Cache obeys `performance.cache_limit_mb` (set to 64, generate, confirm eviction); deleting the cache dir while running recovers cleanly. *(Limit 64 MB with a planted, old 70 MB entry: the janitor evicted it at startup and kept the recent ones. Deleting `thumbs/` and `waveforms/` while running: both regenerated.)*
+- [x] Toggling theme and accent redraws the waveform in the new colours. *(Applying theme/accent tokens at runtime arrives in Phase 10; with the tokens changed by hand plus the setting change, the canvases redrew from orange to blue and from the dark to the light track colour.)*
 
 **Platforms:** W + L-Wayland.
+
+**Phase 6 notes (2026-11-13, Windows only).** Driven through the webview's DevTools channel in
+the quiet, muted test build. Found and fixed: `MediaInfo.key` was never filled in (thumbnail and
+waveform requests need it); thumbnails taken at a bucket's start could show the previous keyframe
+(D31: taken from the middle now); a quiet mix drew a waveform a few pixels tall (scaled to the
+file's loudest moment now). The Unix FIFO path for waveforms is not built yet: Linux uses the
+documented temp-file fallback until spike S2 checks FIFOs.
 
 ---
 

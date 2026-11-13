@@ -8,6 +8,7 @@ import type { PlayerState } from "./bindings/PlayerState";
 import type { QueueState } from "./bindings/QueueState";
 import type { ResolvedKeymap } from "./bindings/ResolvedKeymap";
 import type { TimeEvent } from "./bindings/TimeEvent";
+import type { WaveformProgress } from "./bindings/WaveformProgress";
 import type { WindowState } from "./bindings/WindowState";
 import { listen, type Unlisten } from "./transport";
 
@@ -43,3 +44,6 @@ export const onWindowState = (handler: (state: WindowState) => void): Unlisten =
 
 export const onInspector = (handler: (stats: InspectorStats) => void): Unlisten =>
   listen<InspectorStats>("player://inspector", handler);
+
+export const onWaveform = (handler: (progress: WaveformProgress) => void): Unlisten =>
+  listen<WaveformProgress>("media://waveform", handler);

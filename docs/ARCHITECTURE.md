@@ -803,8 +803,10 @@ interface AppInfo {
 | `window_set_mode` | `{ mode: "normal" \| "fullscreen" \| "pip" }` | `void` |
 | `window_set_always_on_top` | `{ enabled: boolean }` | `void` |
 | `window_minimize` / `window_toggle_maximize` / `window_close` | — | `void` |
-| `waveform_request` | `{ mediaKey: string, trackId: number }` | `{ status: "ready" \| "running" \| "queued" \| "unavailable" }` |
+| `waveform_request` | `{ mediaKey: string, trackId: number }` | `{ status: "ready" \| "running" \| "queued" \| "unavailable" \| "cancelled" \| "failed" }` |
 | `waveform_get` | `{ mediaKey: string, trackId: number }` | binary `ArrayBuffer` (`.vwf`, §11.2) |
+| `cache_info` / `cache_clear` | — | `{ bytes, limitBytes }` / `void` (deletes thumbnails and waveforms, §9.7) |
+| `video_output_transfer` | — | `string \| null` (`video-target-params/gamma`: `"pq"`/`"hlg"` while HDR passes through) |
 | `app_info` | — | `AppInfo` |
 | `app_pick_media` | `{ kind: "files" \| "folder" }` | `string[]` (native open dialog; empty when cancelled) |
 | `app_ready` | — | `void` (frontend painted; show window) |
@@ -1225,11 +1227,16 @@ One click pairs external subtitle files with the videos in the current folder or
 
 ### 11.1 Seek-preview thumbnails (`media/thumbs.rs`)
 
+The headless mpv handles of §11.1 and §11.2 live in `player/headless.rs` (with the software render
+context in `player/mpv.rs`), so libmpv is still touched only under `player/`; `media/` schedules,
+caches, and encodes. The named pipe is `platform/pipe.rs`.
+
 - Dedicated headless mpv handle: `vo=libmpv` with a **software** render context (`MPV_RENDER_API_TYPE_SW`,
   format `rgb0`), `aid=no sid=no pause=yes hr-seek=no hwdec=<performance.thumbnail_hwdec, default "auto-copy">
   vd-lavc-skiploopfilter=all vd-lavc-fast=yes vd-lavc-threads=2 demuxer-readahead-secs=0 load-scripts=no config=no`.
 - Loads the same file as the primary player. A request `(media_key, step, bucket)` seeks to
-  `bucket × step` (keyframe seek), renders one frame at 320 px width, JPEG-encodes (q70), writes to cache, replies.
+  `(bucket + ½) × step` (keyframe seek; the middle, because a keyframe seek to a time exactly on a keyframe
+  can land on the previous one — D31), renders one frame at 320 px width, JPEG-encodes (q70), writes to cache, replies.
 - **Bucketing:** `step = clamp(duration / 300, 2, 30)` seconds, rounded to an integer. The frontend maps
   hover time → bucket and requests `vthumb://…`. Identical buckets hit the HTTP cache.
 - **Scheduling:** single worker, latest-wins (a new request cancels all queued ones). While idle it
@@ -1478,6 +1485,7 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D28 | Toasts may carry a `group`; a newer toast of the same group replaces the older one in place | Three unplayable files in a row would otherwise stack two skip notices under the summary; the plan asks for one summary toast. |
 | D29 | After live EQ commands the core rewrites the `af` entry when the next file starts | `af-command` changes only the running filter; mpv builds the next file's filter from the option text, which would bring back the old curve. Rewriting at start-file costs no audible rebuild. |
 | D30 | The flip shaders are embedded in the binary and written to `<cache>/shaders/` at startup | mpv loads shaders from files, and the resources folder's location differs between dev, installed, and portable layouts. |
+| D31 | Preview frames are taken from the middle of their bucket, not its start | Bucket starts often sit exactly on keyframes, and a keyframe seek to such a time landed one keyframe early (T3: the 6 s thumbnail showed the 4 s frame). |
 
 ### Open risks (each owned by a Phase 1 spike)
 

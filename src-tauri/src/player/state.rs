@@ -102,6 +102,8 @@ pub struct Mirror {
     keepaspect: bool,
     aspect_override: String,
     hdr: Option<String>,
+    /// The identity (§9.2) of the file being opened, keyed by the source passed to mpv.
+    expected_key: Option<(String, String)>,
 }
 
 impl Mirror {
@@ -172,6 +174,7 @@ impl Mirror {
             keepaspect: true,
             aspect_override: "no".to_string(),
             hdr: None,
+            expected_key: None,
         }
     }
 
@@ -186,6 +189,13 @@ impl Mirror {
         self.inputs.hold = false;
         self.state.error = None;
         self.refresh_status()
+    }
+
+    /// The core is about to open `source`; its media key fills `media.key` once mpv reports
+    /// that path.
+    pub fn expect_media(&mut self, source: &str, key: Option<String>) -> Effects {
+        self.expected_key = key.map(|key| (source.to_string(), key));
+        self.refresh_media()
     }
 
     /// The queue is exhausted and the last frame stays on screen: `Ended` → `Paused`.
@@ -266,10 +276,13 @@ impl Mirror {
         } else {
             let has_video =
                 self.state.tracks.iter().any(|t| t.kind == TrackKind::Video && !t.image);
-            let previous_key =
-                self.state.media.as_ref().filter(|m| m.source == self.path).map(|m| m.key.clone());
+            let key = self
+                .expected_key
+                .as_ref()
+                .filter(|(source, _)| *source == self.path)
+                .map(|(_, key)| key.clone());
             Some(MediaInfo {
-                key: previous_key.unwrap_or_default(),
+                key: key.unwrap_or_default(),
                 source: self.path.clone(),
                 is_url: is_url(&self.path),
                 title: if self.title.is_empty() { self.path.clone() } else { self.title.clone() },
@@ -670,6 +683,7 @@ mod tests {
         assert_eq!(m.state.status, Status::Idle);
         m.begin_loading();
         assert_eq!(m.state.status, Status::Loading, "the open request shows at once");
+        m.expect_media("D:/Shows/e1.mkv", Some("f:0123456789abcdef".into()));
         let seen = statuses(&mut m, &load_sequence("D:/Shows/e1.mkv"));
         // The recorded sequence includes the initial seek mpv does after loading.
         assert_eq!(seen, vec![Status::Playing, Status::Seeking, Status::Playing]);
@@ -678,6 +692,7 @@ mod tests {
         assert_eq!(media.title, "Episode 1");
         assert_eq!(media.duration, 1420.0);
         assert!(!media.is_url);
+        assert_eq!(media.key, "f:0123456789abcdef", "identity from the load pipeline");
     }
 
     #[test]

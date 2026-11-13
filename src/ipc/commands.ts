@@ -1,6 +1,7 @@
 /** Typed wrapper per core command (ARCHITECTURE §7.3). Components never call `invoke` directly. */
 import type { AbLoop } from "./bindings/AbLoop";
 import type { AppInfo } from "./bindings/AppInfo";
+import type { CacheInfo } from "./bindings/CacheInfo";
 import type { Config } from "./bindings/Config";
 import type { Direction } from "./bindings/Direction";
 import type { EqPreset } from "./bindings/EqPreset";
@@ -20,6 +21,7 @@ import type { TrackSlot } from "./bindings/TrackSlot";
 import type { UiPatch } from "./bindings/UiPatch";
 import type { UiState } from "./bindings/UiState";
 import type { VideoPatch } from "./bindings/VideoPatch";
+import type { WaveformRequestResult } from "./bindings/WaveformRequestResult";
 import type { WindowMode } from "./bindings/WindowMode";
 import type { WindowState } from "./bindings/WindowState";
 import { invoke } from "./transport";
@@ -124,3 +126,13 @@ export const configGet = () => invoke<Config>("config_get");
 export const configSet = (path: string, value: unknown) =>
   invoke<void>("config_set", { path, value });
 export const configReset = (path?: string) => invoke<void>("config_reset", { path });
+
+// ── media services (ARCHITECTURE §11) ────────────────────────────────────────
+/** Starts or reports the waveform for an audio track of the current file. */
+export const waveformRequest = (mediaKey: string, trackId: number) =>
+  invoke<WaveformRequestResult>("waveform_request", { mediaKey, trackId });
+/** The finished `.vwf` bytes (§11.2). */
+export const waveformGet = (mediaKey: string, trackId: number) =>
+  invoke<ArrayBuffer>("waveform_get", { mediaKey, trackId });
+export const cacheInfo = () => invoke<CacheInfo>("cache_info");
+export const cacheClear = () => invoke<void>("cache_clear");

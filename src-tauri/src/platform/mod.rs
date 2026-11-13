@@ -3,6 +3,7 @@
 //! never branches on the OS itself.
 
 pub mod media;
+pub mod pipe;
 pub mod power;
 
 use crate::config::Config;
@@ -10,7 +11,7 @@ use crate::config::Config;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(windows)]
-mod windows;
+pub(crate) mod windows;
 
 /// Makes `--help` / `--version` output visible when a GUI-subsystem build is started from a
 /// terminal. No-op elsewhere.

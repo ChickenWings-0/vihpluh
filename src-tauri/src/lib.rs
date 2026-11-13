@@ -45,6 +45,8 @@ pub struct AppState {
     pub db: Option<Arc<library::db::Db>>,
     pub capabilities: Capabilities,
     pub eq_presets: Arc<config::eq_presets::EqPresetStore>,
+    pub thumbs: media::thumbs::ThumbService,
+    pub waveform: media::waveform::WaveformService,
     revealed: AtomicBool,
 }
 
@@ -188,6 +190,9 @@ fn launch(
     }
 
     let keybinds = KeybindStore::open(paths.config.join("keybinds.toml"));
+    let thumbs = media::thumbs::ThumbService::start(paths.cache.clone())?;
+    let waveform = media::waveform::WaveformService::new(paths.cache.clone(), player.clone());
+    start_cache_janitor(paths.cache.clone(), store.clone());
     let state = AppState {
         paths,
         config: store,
@@ -196,6 +201,8 @@ fn launch(
         db,
         capabilities,
         eq_presets,
+        thumbs,
+        waveform,
         revealed: AtomicBool::new(false),
     };
     let mut builder = tauri::Builder::default();
@@ -206,6 +213,7 @@ fn launch(
         .plugin(tauri_plugin_dialog::init())
         .manage(state)
         .manage(WindowManager::default())
+        .register_asynchronous_uri_scheme_protocol(ipc::protocol::SCHEME, ipc::protocol::handle)
         .setup(|app| {
             setup(app)?;
             Ok(())
@@ -256,6 +264,10 @@ macro_rules! commands {
             ipc::commands::video::video_set_adjust,
             ipc::commands::video::video_reset,
             ipc::commands::video::video_output_transfer,
+            ipc::commands::media::waveform_request,
+            ipc::commands::media::waveform_get,
+            ipc::commands::media::cache_info,
+            ipc::commands::media::cache_clear,
             ipc::commands::video::shaders_list,
             ipc::commands::player::player_set_sleep_timer,
             ipc::commands::player::inspector_subscribe,
@@ -301,6 +313,22 @@ fn invoke_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stat
     commands![]
 }
 
+/// Keeps the thumbnail/waveform cache under `performance.cache_limit_mb`: at startup (after a
+/// short delay, off the startup path) and hourly (§9.7).
+fn start_cache_janitor(cache: std::path::PathBuf, config: Arc<ConfigStore>) {
+    let spawned = std::thread::Builder::new().name("cache-janitor".into()).spawn(move || {
+        std::thread::sleep(Duration::from_secs(20));
+        loop {
+            let limit = u64::from(config.get().performance.cache_limit_mb) * 1024 * 1024;
+            media::cache::enforce(&cache, limit);
+            std::thread::sleep(Duration::from_secs(3600));
+        }
+    });
+    if let Err(err) = spawned {
+        tracing::warn!("cache: could not start the janitor: {err}");
+    }
+}
+
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let state = app.state::<AppState>();
     let window_config = app
@@ -317,6 +345,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .data_directory(state.paths.data.join("webview"))
         .build()?;
     state.player.attach(app.handle().clone(), &window, platform::native_window_handle(&window))?;
+    state.waveform.attach(app.handle().clone());
     WindowManager::track(&window);
 
     // Settings changes — from the UI or from an editor saving config.toml — apply live.
@@ -434,6 +463,8 @@ fn shutdown(app: &AppHandle) {
         std::process::exit(0);
     });
     if let Some(state) = app.try_state::<AppState>() {
+        state.thumbs.shutdown();
+        state.waveform.cancel();
         state.player.shutdown();
     }
 }

@@ -601,6 +601,90 @@ impl Drop for Mpv {
     }
 }
 
+/// A software render context (`MPV_RENDER_API_TYPE_SW`): mpv draws frames into memory we
+/// own, with no window and no GPU (ARCHITECTURE §11.1). Owns its `Mpv` so the context is
+/// always freed before the handle it renders from. Use from one thread.
+pub struct SwRender {
+    ctx: NonNull<sys::mpv_render_context>,
+    // Dropped after `ctx` is freed (see Drop).
+    mpv: Mpv,
+}
+
+// SAFETY: the render context may be used from any single thread at a time; `SwRender` is
+// moved to its worker thread and used only there (it is not Sync).
+unsafe impl Send for SwRender {}
+
+impl SwRender {
+    /// Creates the context on an initialised handle created with `vo=libmpv`.
+    pub fn new(mpv: Mpv) -> MpvResult<Self> {
+        let api = cstring("sw")?;
+        let mut params = [
+            sys::mpv_render_param {
+                type_: sys::mpv_render_param_type_MPV_RENDER_PARAM_API_TYPE,
+                data: api.as_ptr() as *mut c_void,
+            },
+            sys::mpv_render_param { type_: 0, data: ptr::null_mut() },
+        ];
+        let mut ctx: *mut sys::mpv_render_context = ptr::null_mut();
+        // SAFETY: valid handle; `params` is a zero-terminated array whose pointers outlive the
+        // call; mpv writes the new context to `ctx`.
+        check(unsafe { sys::mpv_render_context_create(&mut ctx, mpv.raw(), params.as_mut_ptr()) })?;
+        let ctx = NonNull::new(ctx).ok_or(MpvError::Create)?;
+        Ok(Self { ctx, mpv })
+    }
+
+    pub fn mpv(&self) -> &Mpv {
+        &self.mpv
+    }
+
+    /// True when a new frame is ready to render (`MPV_RENDER_UPDATE_FRAME`).
+    pub fn frame_ready(&self) -> bool {
+        // SAFETY: valid context, used from its owning thread.
+        let flags = unsafe { sys::mpv_render_context_update(self.ctx.as_ptr()) };
+        flags & u64::from(sys::mpv_render_update_flag_MPV_RENDER_UPDATE_FRAME) != 0
+    }
+
+    /// Renders the current frame as `rgb0` (4 bytes per pixel, last byte unused) into a
+    /// `width × height` buffer, scaled to fit.
+    pub fn render(&self, width: usize, height: usize) -> MpvResult<Vec<u8>> {
+        let stride = width * 4;
+        let mut buffer = vec![0u8; stride * height];
+        let mut size = [width as c_int, height as c_int];
+        let mut stride_value = stride;
+        let format = cstring("rgb0")?;
+        let mut params = [
+            sys::mpv_render_param {
+                type_: sys::mpv_render_param_type_MPV_RENDER_PARAM_SW_SIZE,
+                data: size.as_mut_ptr().cast(),
+            },
+            sys::mpv_render_param {
+                type_: sys::mpv_render_param_type_MPV_RENDER_PARAM_SW_FORMAT,
+                data: format.as_ptr() as *mut c_void,
+            },
+            sys::mpv_render_param {
+                type_: sys::mpv_render_param_type_MPV_RENDER_PARAM_SW_STRIDE,
+                data: (&raw mut stride_value).cast(),
+            },
+            sys::mpv_render_param {
+                type_: sys::mpv_render_param_type_MPV_RENDER_PARAM_SW_POINTER,
+                data: buffer.as_mut_ptr().cast(),
+            },
+            sys::mpv_render_param { type_: 0, data: ptr::null_mut() },
+        ];
+        // SAFETY: valid context; every parameter points at live data of the documented type
+        // (int[2] size, C string format, size_t stride, a buffer of stride × height bytes).
+        check(unsafe { sys::mpv_render_context_render(self.ctx.as_ptr(), params.as_mut_ptr()) })?;
+        Ok(buffer)
+    }
+}
+
+impl Drop for SwRender {
+    fn drop(&mut self) {
+        // SAFETY: we own the context; it is freed before `self.mpv` drops.
+        unsafe { sys::mpv_render_context_free(self.ctx.as_ptr()) }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
