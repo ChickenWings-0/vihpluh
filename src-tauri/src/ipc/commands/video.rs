@@ -26,6 +26,12 @@ pub fn video_set_adjust(state: State<'_, AppState>, patch: VideoPatch) {
     state.player.set_video(patch);
 }
 
+/// What the display receives: `"pq"`/`"hlg"` while HDR passes through (DESIGN_SYSTEM §10.3).
+#[tauri::command(async)]
+pub fn video_output_transfer(state: State<'_, AppState>) -> Option<String> {
+    state.player.output_transfer()
+}
+
 #[tauri::command]
 pub fn video_reset(state: State<'_, AppState>) {
     state.player.reset_video();
@@ -35,6 +41,10 @@ pub fn video_reset(state: State<'_, AppState>) {
 #[tauri::command(async)]
 pub fn shaders_list(state: State<'_, AppState>) -> Vec<ShaderEntry> {
     let dir = state.paths.config.join("shaders");
+    // Created on first look so "Open shaders folder" always has somewhere to go.
+    if let Err(err) = std::fs::create_dir_all(&dir) {
+        tracing::debug!("could not create the shaders folder: {err}");
+    }
     let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
     let mut shaders: Vec<ShaderEntry> = entries
         .filter_map(Result::ok)

@@ -3,6 +3,8 @@ import type { AbLoop } from "./bindings/AbLoop";
 import type { AppInfo } from "./bindings/AppInfo";
 import type { Config } from "./bindings/Config";
 import type { Direction } from "./bindings/Direction";
+import type { EqPreset } from "./bindings/EqPreset";
+import type { EqState } from "./bindings/EqState";
 import type { Margins } from "./bindings/Margins";
 import type { OpenRequest } from "./bindings/OpenRequest";
 import type { PickKind } from "./bindings/PickKind";
@@ -12,9 +14,12 @@ import type { RecentEntry } from "./bindings/RecentEntry";
 import type { Repeat } from "./bindings/Repeat";
 import type { ResolvedKeymap } from "./bindings/ResolvedKeymap";
 import type { SeekRequest } from "./bindings/SeekRequest";
+import type { ShaderEntry } from "./bindings/ShaderEntry";
+import type { SleepRequest } from "./bindings/SleepRequest";
 import type { TrackSlot } from "./bindings/TrackSlot";
 import type { UiPatch } from "./bindings/UiPatch";
 import type { UiState } from "./bindings/UiState";
+import type { VideoPatch } from "./bindings/VideoPatch";
 import type { WindowMode } from "./bindings/WindowMode";
 import type { WindowState } from "./bindings/WindowState";
 import { invoke } from "./transport";
@@ -56,6 +61,15 @@ export const tracksSelect = (kind: TrackSlot, id: number | null) =>
 
 // ── audio / subtitles ────────────────────────────────────────────────────────
 export const audioSetDelay = (ms: number) => invoke<void>("audio_set_delay", { ms });
+export const audioSetDevice = (name: string) => invoke<void>("audio_set_device", { name });
+/** Live EQ; the on/off switch and preset are also saved as defaults. */
+export const audioSetEq = (eq: EqState) => invoke<void>("audio_set_eq", { eq });
+/** Writes `audio.normalize`; the core follows the setting. */
+export const audioSetNormalize = (enabled: boolean) =>
+  invoke<void>("audio_set_normalize", { enabled });
+export const eqPresetsList = () => invoke<EqPreset[]>("eq_presets_list");
+export const eqPresetSave = (preset: EqPreset) => invoke<void>("eq_preset_save", { preset });
+export const eqPresetDelete = (id: string) => invoke<void>("eq_preset_delete", { id });
 export const subSetDelay = (ms: number) => invoke<void>("sub_set_delay", { ms });
 export const subSetVisible = (visible: boolean) => invoke<void>("sub_set_visible", { visible });
 
@@ -82,6 +96,16 @@ export const sessionUiSet = (patch: UiPatch) => invoke<void>("session_ui_set", {
 
 // ── video ────────────────────────────────────────────────────────────────────
 export const videoSetMargins = (req: Margins) => invoke<void>("video_set_margins", { req });
+export const videoSetAdjust = (patch: VideoPatch) => invoke<void>("video_set_adjust", { patch });
+export const videoReset = () => invoke<void>("video_reset");
+/** `"pq"`/`"hlg"` while HDR passes through to the display; null when not reported. */
+export const videoOutputTransfer = () => invoke<string | null>("video_output_transfer");
+export const shadersList = () => invoke<ShaderEntry[]>("shaders_list");
+export const playerSetSleepTimer = (req: SleepRequest) =>
+  invoke<void>("player_set_sleep_timer", { req });
+/** The stream inspector sends `player://inspector` at 2 Hz only while subscribed. */
+export const inspectorSubscribe = (enabled: boolean) =>
+  invoke<void>("inspector_subscribe", { enabled });
 
 // ── keybinds ─────────────────────────────────────────────────────────────────
 export const keybindsGet = () => invoke<ResolvedKeymap>("keybinds_get");

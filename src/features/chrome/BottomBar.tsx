@@ -3,18 +3,7 @@
  * elapsed, the seek bar taking all remaining width, total/remaining (click to switch),
  * volume, track buttons, panel toggles, fullscreen. Collapses by width per §6.4.
  */
-import {
-  AudioLines,
-  Captions,
-  ChevronUp,
-  Expand,
-  Layers,
-  Pause,
-  Play,
-  Shrink,
-  SkipBack,
-  SkipForward,
-} from "lucide-react";
+import { ChevronUp, Expand, Pause, Play, Shrink, SkipBack, SkipForward } from "lucide-react";
 import { useRef } from "react";
 import { IconButton } from "@/components/IconButton";
 import { Popover } from "@/components/Popover";
@@ -29,6 +18,7 @@ import { usePlayer } from "@/stores/player";
 import { getDuration, getPosition } from "@/stores/time";
 import { useUiStore } from "@/stores/ui";
 import { SeekBar } from "./SeekBar";
+import { TrackSelectors } from "./TrackPopovers";
 import { MuteButton, VolumeCone } from "./VolumeCone";
 
 function Elapsed() {
@@ -130,14 +120,7 @@ export function BottomBar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        {level < 2 ? (
-          <>
-            <IconButton icon={Captions} label="Subtitles" actionId="ui.sidebar_subtitles" />
-            <IconButton icon={AudioLines} label="Audio" actionId="ui.sidebar_audio" />
-          </>
-        ) : (
-          <IconButton icon={Layers} label="Tracks" actionId="ui.sidebar_audio" />
-        )}
+        <TrackSelectors combined={level >= 2} />
       </div>
 
       {level < 3 && (

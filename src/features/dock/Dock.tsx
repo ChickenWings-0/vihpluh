@@ -14,6 +14,7 @@ import { useConfig } from "@/stores/config";
 import { reportError } from "@/stores/osd";
 import { useUiStore } from "@/stores/ui";
 import { QueuePanel } from "../queue/QueuePanel";
+import { Sidebar } from "../sidebar/Sidebar";
 
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 480;
@@ -117,15 +118,7 @@ export function Dock() {
         onPointerUp={onResizeUp}
         className="absolute inset-y-0 -left-1 w-2 cursor-ew-resize"
       />
-      {dock === "queue" ? <QueuePanel /> : <SidebarPlaceholder />}
+      {dock === "queue" ? <QueuePanel /> : <Sidebar width={width} />}
     </aside>
-  );
-}
-
-function SidebarPlaceholder() {
-  return (
-    <div className="flex flex-1 items-center justify-center p-4 text-center text-fg-3">
-      The sidebar arrives in the next update.
-    </div>
   );
 }

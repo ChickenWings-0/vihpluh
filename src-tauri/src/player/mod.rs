@@ -510,6 +510,15 @@ impl Player {
         self.send(CoreMsg::Inspector(enabled));
     }
 
+    /// The transfer function mpv is outputting (`video-target-params/gamma`): "pq" or "hlg"
+    /// while HDR passes through to the display, an SDR curve when it is tone-mapped. `None`
+    /// when nothing is shown or the renderer does not report it.
+    pub fn output_transfer(&self) -> Option<String> {
+        let mpv = self.mpv()?;
+        let params = mpv.get_node("video-target-params")?;
+        params.str_field("gamma").filter(|g| !g.is_empty()).map(str::to_string)
+    }
+
     /// Takes a screenshot and returns its path. Waits for mpv to write the file. Fails when
     /// nothing is loaded (mpv would otherwise save a blank picture).
     pub fn screenshot(&self, subtitles: bool) -> Result<String, MpvError> {

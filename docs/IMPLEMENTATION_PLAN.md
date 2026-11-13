@@ -305,32 +305,39 @@ the wrong file (toasts now carry a group, D28, and the name comes from the queue
 
 ---
 
-## 7. Phase 5 — Sidebar: audio, video, playback — ◐ in progress
+## 7. Phase 5 — Sidebar: audio, video, playback — ☑ closed (Windows, 2026-11-13) — Linux pending; two hands-on checks pending (see notes)
 
 **Goal:** the right sidebar shell with three of its tabs, plus the quick track selectors in the bottom bar.
 
-- [ ] Sidebar shell: tab row (D§10), tab actions (`ui.sidebar_*`, `ui.toggle_sidebar`), last tab remembered in session.
-- [ ] Standard parameter row (D§8.5): slider + exact value field + reset + detents + keyboard stepping. Segmented control, toggle, select, chip, checkbox primitives (D§8.6).
-- [ ] **Quick selectors** (D§8.3): subtitles popover (tracks, Off, add file) and audio popover (tracks + output devices); state dots on the buttons.
-- [ ] **Audio tab** (D§10.2): track select, output device (hot-plug aware), preferred-language chips, audio delay row.
-- [ ] Equalizer: `player/equalizer.rs` (filter graph build, live gain via `af-command` or debounced replace per S4), `audio_set_eq`, EQ presets file (K§5.12) + `eq_presets_*`; UI: response-curve canvas with true biquad math (`src/lib/eq.ts`, unit-tested against known coefficients), 10-band nodes, parametric mode, visual preset chips, preamp, save preset. Normalisation toggle.
-- [ ] **Video tab** (D§10.3): picture sliders, aspect segmented control, rotate/flip (shader path), zoom + Alt-drag pan, tone-mapping select gated by `capabilities`, deband/interpolation, shaders list from `<config>/shaders/`, reset all.
-- [ ] **Playback tab** (D§10.4): speed row + chips, frame step, reverse toggle, loop (file / A–B with fields and seek-bar brackets), sleep timer (`player/sleep.rs` with fade-out), seek-bar toggles, **stream inspector** (`inspector_subscribe`, 2 Hz, copy-all, show in folder).
-- [ ] Remaining actions from K§2 audio/video groups wired to real handlers.
+- [x] Sidebar shell: tab row (D§10), tab actions (`ui.sidebar_*`, `ui.toggle_sidebar`), last tab remembered in session. *(Audio, Video, Playback; the Subtitles and Bookmarks tabs join in Phases 7 and 8.)*
+- [x] Standard parameter row (D§8.5): slider + exact value field + reset + detents + keyboard stepping. Segmented control, toggle, select, chip, checkbox primitives (D§8.6).
+- [x] **Quick selectors** (D§8.3): subtitles popover (tracks, Off, add file) and audio popover (tracks + output devices); state dots on the buttons. *("Add subtitle file…" and auto-match are listed but disabled until Phase 7.)*
+- [x] **Audio tab** (D§10.2): track select, output device (hot-plug aware), preferred-language chips, audio delay row.
+- [x] Equalizer: `player/equalizer.rs` (filter graph build, live gain via `af-command` or debounced replace per S4), `audio_set_eq`, EQ presets file (K§5.12) + `eq_presets_*`; UI: response-curve canvas with true biquad math (`src/lib/eq.ts`, unit-tested against known coefficients), 10-band nodes, parametric mode, visual preset chips, preamp, save preset. Normalisation toggle. *(The curve is drawn as SVG rather than a canvas: about 100 points plus 10 nodes, each node a keyboard-reachable slider.)*
+- [x] **Video tab** (D§10.3): picture sliders, aspect segmented control, rotate/flip (shader path), zoom + Alt-drag pan, tone-mapping select gated by `capabilities`, deband/interpolation, shaders list from `<config>/shaders/`, reset all.
+- [x] **Playback tab** (D§10.4): speed row + chips, frame step, reverse toggle, loop (file / A–B with fields and seek-bar brackets), sleep timer (`player/sleep.rs` with fade-out), seek-bar toggles, **stream inspector** (`inspector_subscribe`, 2 Hz, copy-all, show in folder).
+- [x] Remaining actions from K§2 audio/video groups wired to real handlers.
 
 ### Verification
 
-- [ ] Every slider updates the picture/sound live while dragging on T1; typed exact values land exactly; reset and double-click-reset work; detent snaps at default.
-- [ ] Audio popover switches output device mid-playback with < 1 s interruption; unplugging the active device falls back to system default and updates the list.
-- [ ] EQ: dragging a band is audible immediately with no dropout or click (S4 path), curve matches the nodes; presets switch instantly; a saved custom preset persists in `eq-presets.toml` and survives restart; parametric nodes add/remove/Q-adjust.
-- [ ] Flip H/V and rotate work with `hwdec-current` still showing a hardware decoder; subtitles remain unmirrored.
-- [ ] HDR file T1 on an SDR display: tone-mapping select visibly changes the image; on **W** with HDR enabled the status chip reads passthrough active.
-- [ ] A–B loop loops precisely; sleep timer "15 min" (test with a 1-min debug value) fades and pauses; "End of file" pauses at EOF instead of advancing.
-- [ ] Inspector values for T1 match `mediainfo`/`ffprobe` for codec, resolution, fps, bit depth, channels; updates stop when the tab is hidden (verify no `player://inspector` events).
-- [ ] Sidebar open + EQ canvas + inspector running over T4: dropped frames within A§14.
+- [x] Every slider updates the picture/sound live while dragging on T1; typed exact values land exactly; reset and double-click-reset work; detent snaps at default. *(Contrast moved mpv to 49 mid-drag; typed 15 and −3.5 dB landed exactly; a press 4 px from the centre snapped to 0, 20 px gave 12.)*
+- [ ] Audio popover switches output device mid-playback with < 1 s interruption; unplugging the active device falls back to system default and updates the list. *(Implemented; needs a person: switching routes sound to the owner's real devices, and unplugging needs hands.)*
+- [x] EQ: dragging a band is audible immediately with no dropout or click (S4 path), curve matches the nodes; presets switch instantly; a saved custom preset persists in `eq-presets.toml` and survives restart; parametric nodes add/remove/Q-adjust. *(**W**, muted: node drags, preamp, and switching between 10-band presets left mpv's `af` text unchanged, i.e. no filter rebuild — S4 measured the live gain change at +12.0 dB for +12 dB. A saved preset was written to `eq-presets.toml` and was still listed and active after a restart. Parametric: double-click added a 299 Hz node, the wheel raised Q 1 → 1.1, right-click → Delete removed it; shelves map to `bass`/`treble`. The by-ear part is left for a person.)*
+- [x] Flip H/V and rotate work with `hwdec-current` still showing a hardware decoder; subtitles remain unmirrored. *(`hwdec-current` stayed `d3d11va` with Mirror on; the picture mirrored in a window capture. Unmirrored subtitles were checked in spike S4.)*
+- [ ] HDR file T1 on an SDR display: tone-mapping select visibly changes the image; on **W** with HDR enabled the status chip reads passthrough active. *(**W** SDR: clip vs hable differ by 6–11 levels per channel on average, and the chip reads "Tone-mapped". The HDR-display half needs Windows HDR turned on by a person.)*
+- [x] A–B loop loops precisely; sleep timer "15 min" (test with a 1-min debug value) fades and pauses; "End of file" pauses at EOF instead of advancing. *(A = 10.000, B = 12.500 typed: position stayed within 10.000–12.429 over 6 s with two wraps. A 15 s timer faded the volume (80 → 37 with 5 s left), paused, and put the volume back to 80; End of file paused on the same item in a two-item queue.)*
+- [x] Inspector values for T1 match `mediainfo`/`ffprobe` for codec, resolution, fps, bit depth, channels; updates stop when the tab is hidden (verify no `player://inspector` events). *(HEVC, 3840×2160, 23.976 fps, 10-bit, BT.2020/PQ, AAC stereo 48 kHz — all as `ffprobe` reports. 5 events in 2.2 s on the Playback tab, 0 in 2.5 s after switching to Audio.)*
+- [x] Sidebar open + EQ canvas + inspector running over T4: dropped frames within A§14. *(60 s on T4: 15 node drags on the Audio tab, then the inspector: 0 dropped, 0 decoder-dropped, 0 delayed frames.)*
 - [ ] On **L**, options the render backend lacks are hidden, not broken.
 
 **Platforms:** W + L-Wayland.
+
+**Phase 5 notes (2026-11-13, Windows only).** Driven through the webview's DevTools channel in
+the quiet, muted test build. Still for a person: switching and unplugging output devices (real
+hardware), listening for EQ dropouts, and the HDR-display passthrough chip. Fixed along the way:
+mpv reports aspect overrides back as decimals (and "no" as −2), so the mirror maps them to names;
+the inspector read the GPU surface format (`d3d11`) instead of the decoded one with hardware
+decoding; graph grid lines swallowed double-clicks; segmented controls truncated long labels.
 
 ---
 

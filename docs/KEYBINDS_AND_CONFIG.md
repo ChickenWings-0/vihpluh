@@ -272,7 +272,7 @@ Parameterised actions available to `[[custom]]` only:
 | `audio.set_equalizer_preset` | `{ id: string }` |
 | `video.set_aspect` | `{ value: string }` |
 | `presets.apply` | `{ id: string }` |
-| `player.set_sleep_timer` | `{ minutes: number }` |
+| `player.set_sleep_timer` | `{ minutes: number }`, or `{ kind: "off" \| "end_of_file" \| "end_of_queue" }` |
 | `mpv.command` | `{ command: string[] }` — escape hatch; passed to mpv verbatim |
 
 ---

@@ -1,8 +1,8 @@
 /**
  * A plain horizontal slider (DESIGN_SYSTEM §8.5 track and thumb): 4 px track, fill from the
  * zero point for bipolar ranges, 12 × 16 thumb, keyboard stepping (Shift ×10, Alt ÷10),
- * double-click to reset, magnetic detent at the default. The full parameter row (label, value
- * field, reset button) is built on this in Phase 5.
+ * double-click to reset, magnetic detent at the default. `ParamRow` adds the label, exact
+ * value field, and reset button.
  */
 import { type KeyboardEvent, type PointerEvent, useRef } from "react";
 import { useUiStore } from "@/stores/ui";

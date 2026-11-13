@@ -1,6 +1,7 @@
 /** Typed subscriptions to core events (ARCHITECTURE §7.4). */
 import type { ConfigChanged } from "./bindings/ConfigChanged";
 import type { DebugStats } from "./bindings/DebugStats";
+import type { InspectorStats } from "./bindings/InspectorStats";
 import type { OpenEvent } from "./bindings/OpenEvent";
 import type { OsdEvent } from "./bindings/OsdEvent";
 import type { PlayerState } from "./bindings/PlayerState";
@@ -39,3 +40,6 @@ export const onKeybindsChanged = (handler: (keymap: ResolvedKeymap) => void): Un
 
 export const onWindowState = (handler: (state: WindowState) => void): Unlisten =>
   listen<WindowState>("window://state", handler);
+
+export const onInspector = (handler: (stats: InspectorStats) => void): Unlisten =>
+  listen<InspectorStats>("player://inspector", handler);

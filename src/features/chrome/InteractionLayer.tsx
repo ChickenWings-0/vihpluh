@@ -2,20 +2,33 @@
  * The transparent full-window layer over the video (DESIGN_SYSTEM §6.2, z 0). Mouse and wheel
  * bindings apply only here (KEYBINDS_AND_CONFIG §3.1): click, double-click, middle, back,
  * forward, wheel, right-click. Dragging past a small threshold moves the window instead
- * (`controls.drag_moves_window`), and that click does not count.
+ * (`controls.drag_moves_window`), and that click does not count. Alt+drag pans a zoomed
+ * picture instead (DESIGN_SYSTEM §10.3).
  */
 import { type MouseEvent, type PointerEvent, useRef, type WheelEvent } from "react";
 import { dispatch } from "@/actions";
 import { focusPlayerRoot } from "@/actions/definitions/window";
+import { videoSetAdjust } from "@/ipc/commands";
 import { startWindowDrag } from "@/ipc/transport";
 import { resolveBinding } from "@/keybinds/engine";
 import { bindingFromMouse, bindingFromWheel } from "@/keybinds/normalize";
 import { useConfigStore } from "@/stores/config";
 import { useKeymapStore } from "@/stores/keymap";
 import { reportError } from "@/stores/osd";
+import { usePlayerStore } from "@/stores/player";
 import { useUiStore } from "@/stores/ui";
 
 const DRAG_THRESHOLD_PX = 4;
+const PAN_INTERVAL_MS = 30;
+
+interface Pan {
+  x: number;
+  y: number;
+  panX: number;
+  panY: number;
+  scale: number;
+  sent: number;
+}
 
 function fire(binding: string | null): boolean {
   if (!binding) return false;
@@ -37,9 +50,25 @@ function fire(binding: string | null): boolean {
 export function InteractionLayer() {
   const down = useRef<{ x: number; y: number; dragged: boolean } | null>(null);
   const suppressClick = useRef(false);
+  const pan = useRef<Pan | null>(null);
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     focusPlayerRoot();
+    const video = usePlayerStore.getState().state;
+    if (e.button === 0 && e.altKey && video?.media) {
+      // mpv pans in units of the scaled picture's size, so divide by the zoomed width.
+      e.currentTarget.setPointerCapture(e.pointerId);
+      pan.current = {
+        x: e.clientX,
+        y: e.clientY,
+        panX: video.video.panX,
+        panY: video.video.panY,
+        scale: 2 ** video.video.zoom,
+        sent: 0,
+      };
+      suppressClick.current = true;
+      return;
+    }
     if (e.button === 0) {
       down.current = { x: e.clientX, y: e.clientY, dragged: false };
       suppressClick.current = false;
@@ -47,6 +76,16 @@ export function InteractionLayer() {
   };
 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    const p = pan.current;
+    if (p) {
+      const now = performance.now();
+      if (now - p.sent < PAN_INTERVAL_MS) return;
+      p.sent = now;
+      const panX = p.panX + (e.clientX - p.x) / (window.innerWidth * p.scale);
+      const panY = p.panY + (e.clientY - p.y) / (window.innerHeight * p.scale);
+      void videoSetAdjust({ panX, panY }).catch(reportError);
+      return;
+    }
     const start = down.current;
     if (!start || start.dragged || (e.buttons & 1) === 0) return;
     const config = useConfigStore.getState().config;
@@ -58,8 +97,15 @@ export function InteractionLayer() {
     void startWindowDrag().catch(reportError);
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     down.current = null;
+    if (pan.current) {
+      const p = pan.current;
+      pan.current = null;
+      const panX = p.panX + (e.clientX - p.x) / (window.innerWidth * p.scale);
+      const panY = p.panY + (e.clientY - p.y) / (window.innerHeight * p.scale);
+      void videoSetAdjust({ panX, panY }).catch(reportError);
+    }
   };
 
   const onClick = (e: MouseEvent<HTMLDivElement>) => {

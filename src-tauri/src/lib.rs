@@ -255,6 +255,7 @@ macro_rules! commands {
             ipc::commands::audio::eq_preset_delete,
             ipc::commands::video::video_set_adjust,
             ipc::commands::video::video_reset,
+            ipc::commands::video::video_output_transfer,
             ipc::commands::video::shaders_list,
             ipc::commands::player::player_set_sleep_timer,
             ipc::commands::player::inspector_subscribe,
