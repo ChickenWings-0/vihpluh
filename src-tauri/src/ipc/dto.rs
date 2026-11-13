@@ -292,6 +292,26 @@ pub struct SubStyle {
     pub ass_override: String,
 }
 
+/// `sub_set_style` — any subset of [`SubStyle`].
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields)]
+pub struct SubStylePatch {
+    pub font: Option<String>,
+    pub size: Option<f64>,
+    pub scale: Option<f64>,
+    pub bold: Option<bool>,
+    pub color: Option<String>,
+    pub outline_color: Option<String>,
+    pub outline_size: Option<f64>,
+    pub shadow_offset: Option<f64>,
+    pub background: Option<String>,
+    pub background_color: Option<String>,
+    pub position: Option<f64>,
+    pub margin_y: Option<f64>,
+    pub ass_override: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]

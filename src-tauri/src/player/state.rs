@@ -7,8 +7,8 @@ use crate::cli::is_url;
 use crate::config::Config;
 use crate::config::schema::SubBackground;
 use crate::ipc::dto::{
-    AbLoop, Direction, EqState, MediaInfo, MediaKind, PlayerState, SelectedTracks, Status,
-    SubStyle, TrackKind, VideoAdjust,
+    AbLoop, Direction, EqState, MediaInfo, MediaKind, PlayerState, SelectedTracks, SeriesInfo,
+    Status, SubStyle, TrackKind, VideoAdjust,
 };
 use crate::player::mpv::{EndReason, Event, Node};
 use crate::player::tracks;
@@ -290,12 +290,7 @@ impl Mirror {
                 duration: self.time.dur,
                 file_size: self.file_size,
                 container: self.file_format.clone(),
-                series: self
-                    .state
-                    .media
-                    .as_ref()
-                    .filter(|m| m.source == self.path)
-                    .and_then(|m| m.series.clone()),
+                series: series_of(&self.path),
             })
         };
         let changed = media != self.state.media;
@@ -536,6 +531,20 @@ impl Mirror {
     }
 }
 
+/// Series, season, and episode from a local file's name (§10.2). Films and other files
+/// without an episode marker have none.
+fn series_of(path: &str) -> Option<SeriesInfo> {
+    if is_url(path) {
+        return None;
+    }
+    let parsed = crate::presets::series::parse(path);
+    (parsed.episode.is_some() && !parsed.key.is_empty()).then_some(SeriesInfo {
+        key: parsed.key,
+        season: parsed.season,
+        episode: parsed.episode,
+    })
+}
+
 /// The Video tab's name for an `video-aspect-override` value. mpv reports ratios back as
 /// decimals (`16:9` → `1.777778`) and "no" as a number ≤ 0 (−1 or −2 by version).
 fn aspect_name(value: &str) -> String {
@@ -693,6 +702,13 @@ mod tests {
         assert_eq!(media.duration, 1420.0);
         assert!(!media.is_url);
         assert_eq!(media.key, "f:0123456789abcdef", "identity from the load pipeline");
+        assert_eq!(media.series, None, "no episode marker in the name");
+        m.on_event(&text("path", "D:/Shows/Severance.S02E03.2160p.mkv"));
+        let series = m.state.media.clone().unwrap().series.unwrap();
+        assert_eq!(
+            (series.key.as_str(), series.season, series.episode),
+            ("severance", Some(2), Some(3))
+        );
     }
 
     #[test]

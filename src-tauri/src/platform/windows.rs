@@ -115,3 +115,41 @@ impl Drop for NamedPipe {
         let _ = unsafe { windows::Win32::Foundation::CloseHandle(self.handle) };
     }
 }
+
+/// Face names of every installed font family, unsorted and with duplicates (one entry per
+/// script a family covers).
+pub fn installed_font_faces() -> Vec<String> {
+    use windows::Win32::Foundation::LPARAM;
+    use windows::Win32::Graphics::Gdi::{
+        DEFAULT_CHARSET, EnumFontFamiliesExW, GetDC, LOGFONTW, ReleaseDC, TEXTMETRICW,
+    };
+
+    unsafe extern "system" fn collect(
+        font: *const LOGFONTW,
+        _metrics: *const TEXTMETRICW,
+        _kind: u32,
+        names: LPARAM,
+    ) -> i32 {
+        // SAFETY: GDI passes a valid LOGFONTW for the duration of the call, and `names` is
+        // the `Vec<String>` pointer handed to EnumFontFamiliesExW below, which outlives it.
+        unsafe {
+            let names = &mut *(names.0 as *mut Vec<String>);
+            let face = &(*font).lfFaceName;
+            let len = face.iter().position(|&c| c == 0).unwrap_or(face.len());
+            names.push(String::from_utf16_lossy(&face[..len]));
+        }
+        1
+    }
+
+    let mut names: Vec<String> = Vec::new();
+    let filter = LOGFONTW { lfCharSet: DEFAULT_CHARSET, ..LOGFONTW::default() };
+    // SAFETY: the screen DC is released before returning; the callback only runs inside
+    // EnumFontFamiliesExW, while `names` is alive and not otherwise borrowed.
+    unsafe {
+        let dc = GetDC(None);
+        let param = LPARAM(&raw mut names as isize);
+        EnumFontFamiliesExW(dc, &filter, Some(collect), param, 0);
+        ReleaseDC(None, dc);
+    }
+    names
+}

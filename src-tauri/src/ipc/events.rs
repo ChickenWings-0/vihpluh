@@ -16,5 +16,7 @@ pub const CONFIG_CHANGED: &str = "config://changed";
 pub const OSD_SHOW: &str = "osd://show";
 /// `OpenEvent` — sources forwarded by a second instance (informational).
 pub const APP_OPEN: &str = "app://open";
+/// `CuesEvent` — a subtitle track's cue index grew or finished (`subtitles::CUES_EVENT`).
+pub const MEDIA_CUES: &str = crate::subtitles::CUES_EVENT;
 /// `DebugStats` — development overlay only.
 pub const DEBUG_STATS: &str = "debug://stats";

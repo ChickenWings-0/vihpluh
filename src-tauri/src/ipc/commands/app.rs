@@ -55,6 +55,8 @@ pub fn app_reveal(path: String) -> AppResult<()> {
 pub enum PickKind {
     Files,
     Folder,
+    /// One or more subtitle files to add to what is playing.
+    Subtitles,
 }
 
 /// Shows the native "open" dialog and returns what was chosen (empty when cancelled).
@@ -78,6 +80,12 @@ pub fn app_pick_media(window: WebviewWindow, kind: PickKind) -> Vec<String> {
         PickKind::Folder => {
             dialog.set_title("Open folder").blocking_pick_folder().into_iter().collect()
         }
+        PickKind::Subtitles => dialog
+            .set_title("Add subtitle file")
+            .add_filter("Subtitles", crate::subtitles::automatch::SUB_EXTENSIONS)
+            .add_filter("All files", &["*"])
+            .blocking_pick_files()
+            .unwrap_or_default(),
     };
     picked
         .into_iter()

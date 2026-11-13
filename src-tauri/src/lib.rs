@@ -12,7 +12,9 @@ pub mod media;
 pub mod paths;
 pub mod platform;
 pub mod player;
+pub mod presets;
 pub mod queue;
+pub mod subtitles;
 pub mod video;
 pub mod window;
 
@@ -47,6 +49,7 @@ pub struct AppState {
     pub eq_presets: Arc<config::eq_presets::EqPresetStore>,
     pub thumbs: media::thumbs::ThumbService,
     pub waveform: media::waveform::WaveformService,
+    pub cues: Arc<subtitles::CueIndex>,
     revealed: AtomicBool,
 }
 
@@ -167,6 +170,7 @@ fn launch(
     let session_path = (!cli.no_session).then(|| paths.data.join("session.json"));
     let eq_presets =
         Arc::new(config::eq_presets::EqPresetStore::new(paths.config.join("eq-presets.toml")));
+    let cues = subtitles::CueIndex::new(paths.cache.clone());
     let player = Player::start(
         config.clone(),
         surface,
@@ -177,6 +181,7 @@ fn launch(
             session_path: session_path.clone(),
             eq_presets: eq_presets.clone(),
             shader_dir: paths.cache.join("shaders"),
+            cues: cues.clone(),
         },
     )?;
     let sources = media::files::expand_sources(&cli.sources);
@@ -203,6 +208,7 @@ fn launch(
         eq_presets,
         thumbs,
         waveform,
+        cues,
         revealed: AtomicBool::new(false),
     };
     let mut builder = tauri::Builder::default();
@@ -273,6 +279,13 @@ macro_rules! commands {
             ipc::commands::player::inspector_subscribe,
             ipc::commands::sub::sub_set_delay,
             ipc::commands::sub::sub_set_visible,
+            ipc::commands::sub::sub_set_style,
+            ipc::commands::sub::sub_step,
+            ipc::commands::sub::sub_get_cues,
+            ipc::commands::sub::sub_automatch,
+            ipc::commands::sub::fonts_list,
+            ipc::commands::tracks::tracks_add_external,
+            ipc::commands::tracks::tracks_remove_external,
             ipc::commands::config::config_get,
             ipc::commands::config::config_set,
             ipc::commands::config::config_reset,
@@ -346,6 +359,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
     state.player.attach(app.handle().clone(), &window, platform::native_window_handle(&window))?;
     state.waveform.attach(app.handle().clone());
+    let handle = app.handle().clone();
+    state.cues.on_change(move |event| {
+        let _ = handle.emit(events::MEDIA_CUES, event);
+    });
     WindowManager::track(&window);
 
     // Settings changes — from the UI or from an editor saving config.toml — apply live.

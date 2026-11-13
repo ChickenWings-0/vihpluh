@@ -2146,6 +2146,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "matroska-demuxer"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cbf36668475a45a46bf8710e927e7458b7c387e7c46ddb5457ae0c71cf5e817"
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4501,6 +4507,7 @@ dependencies = [
  "directories",
  "jpeg-encoder",
  "libmpv2-sys",
+ "matroska-demuxer",
  "notify",
  "rusqlite",
  "serde",

@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-const AREAS: [&str; 2] = ["thumbs", "waveforms"];
+const AREAS: [&str; 3] = ["thumbs", "waveforms", "cues"];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry {

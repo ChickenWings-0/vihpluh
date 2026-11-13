@@ -24,3 +24,18 @@ pub fn prepare_environment(config: &Config) {
         unsafe { std::env::set_var(name, value) };
     }
 }
+
+/// Family names of every installed font, as fontconfig lists them (unsorted, duplicated).
+pub fn installed_font_faces() -> Vec<String> {
+    let output =
+        std::process::Command::new("fc-list").args(["--format", "%{family[0]}\n"]).output();
+    match output {
+        Ok(out) if out.status.success() => {
+            String::from_utf8_lossy(&out.stdout).lines().map(str::to_string).collect()
+        }
+        _ => {
+            tracing::warn!("fc-list is unavailable: the font list is empty");
+            Vec::new()
+        }
+    }
+}

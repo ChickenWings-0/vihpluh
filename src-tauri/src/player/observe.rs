@@ -77,6 +77,9 @@ pub const OBSERVED: &[(&str, Format)] = &[
     ("sub-pos", Format::Double),
     ("sub-margin-y", Format::Double),
     ("sub-ass-override", Format::String),
+    // The line on screen → the progressive cue index (§11.3), not `PlayerState`
+    ("sub-start", Format::Double),
+    ("sub-end", Format::Double),
 ];
 
 /// Registers every row. A property the linked mpv does not know is skipped with a warning

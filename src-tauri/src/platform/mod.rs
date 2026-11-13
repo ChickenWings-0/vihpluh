@@ -91,3 +91,49 @@ pub fn prepare_environment(config: &Config) {
     #[cfg(not(target_os = "linux"))]
     let _ = config;
 }
+
+/// Installed font families for the subtitle font picker, sorted, each once.
+pub fn installed_fonts() -> Vec<String> {
+    #[cfg(windows)]
+    let faces = windows::installed_font_faces();
+    #[cfg(target_os = "linux")]
+    let faces = linux::installed_font_faces();
+    #[cfg(not(any(windows, target_os = "linux")))]
+    let faces: Vec<String> = Vec::new();
+    tidy_font_list(faces)
+}
+
+/// Drops vertical-writing aliases (`@Name` on Windows) and blanks, removes duplicates, and
+/// sorts without regard to case.
+fn tidy_font_list(faces: Vec<String>) -> Vec<String> {
+    let mut names: Vec<String> = faces
+        .into_iter()
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty() && !name.starts_with('@'))
+        .collect();
+    names.sort_by_key(|name| name.to_lowercase());
+    names.dedup();
+    names
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn font_lists_are_sorted_and_unique() {
+        let faces = ["Segoe UI", "@MS Gothic", "arial", "Segoe UI", " ", "MS Gothic", "Arial"];
+        assert_eq!(
+            tidy_font_list(faces.iter().map(|s| (*s).to_string()).collect()),
+            vec!["arial", "Arial", "MS Gothic", "Segoe UI"]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn this_machine_has_fonts() {
+        let fonts = installed_fonts();
+        assert!(!fonts.is_empty());
+        assert!(fonts.iter().all(|f| !f.starts_with('@')));
+    }
+}

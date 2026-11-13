@@ -4,3 +4,4 @@
 *.png binary
 *.icns binary
 src/ipc/bindings/** linguist-generated=true
+*.mkv binary

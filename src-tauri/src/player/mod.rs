@@ -18,6 +18,7 @@ pub mod observe;
 pub mod options;
 pub mod sleep;
 pub mod state;
+pub mod subs;
 pub mod tracks;
 pub mod video;
 
@@ -130,6 +131,7 @@ pub struct Stores {
     pub eq_presets: Arc<EqPresetStore>,
     /// Where the shipped flip shaders are written for mpv to load.
     pub shader_dir: PathBuf,
+    pub cues: Arc<crate::subtitles::CueIndex>,
 }
 
 /// The handle IPC code talks to.
@@ -167,7 +169,7 @@ impl Player {
         cli_mpv_opts: &[(String, String)],
         stores: Stores,
     ) -> Result<Arc<Self>, PlayerError> {
-        let Stores { db, session_path, eq_presets, shader_dir } = stores;
+        let Stores { db, session_path, eq_presets, shader_dir, cues } = stores;
         let _ = DEFAULT_SCREENSHOT_DIR.set(default_screenshot_dir.display().to_string());
         let caps = surface.capabilities();
         let chain =
@@ -262,6 +264,7 @@ impl Player {
                 inspector: false,
                 last_inspector: Instant::now(),
                 sleep: None,
+                cues,
             };
             std::thread::Builder::new()
                 .name("core".into())
@@ -681,6 +684,7 @@ struct Core {
     inspector: bool,
     last_inspector: Instant,
     sleep: Option<sleep::Sleep>,
+    cues: Arc<crate::subtitles::CueIndex>,
 }
 
 impl Core {
@@ -806,6 +810,9 @@ impl Core {
             self.check_audio_device();
         }
         match event {
+            Event::PropertyChange { name, .. } if name == "sub-start" || name == "sub-end" => {
+                self.record_cue();
+            }
             Event::FileLoaded => self.on_file_loaded(),
             // Save where we are on pause and after a seek (not during a drag: debounced).
             Event::PlaybackRestart

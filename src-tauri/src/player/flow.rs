@@ -14,6 +14,7 @@ use crate::ipc::dto::{
 };
 use crate::ipc::events;
 use crate::library::history::{self, HistoryEntry, TrackMemory};
+use crate::library::sub_links::{self, SubLink};
 use crate::queue::session::{self, SavedItem, SavedQueue, Session, UiPatch};
 use crate::queue::{self, Decision, NewItem, QueueItem, Repeat};
 use crate::window::WindowMode;
@@ -48,6 +49,7 @@ pub(super) struct Prepared {
     generation: u64,
     media_key: Option<String>,
     history: Option<HistoryEntry>,
+    sub_links: Vec<SubLink>,
 }
 
 /// What the core remembers about the file that is loaded.
@@ -56,6 +58,8 @@ pub(super) struct Current {
     pub item_id: String,
     pub media_key: Option<String>,
     pub history: Option<HistoryEntry>,
+    /// Subtitle files linked to this media (§10.5), attached once it has loaded.
+    pub sub_links: Vec<SubLink>,
     /// The position playback resumed at ("always" mode), for the toast.
     pub resumed_at: Option<f64>,
     /// The saved position the "ask" toast offers.
@@ -203,6 +207,7 @@ impl Core {
         let generation = self.generation;
         let source = item.source.clone();
         let db = if self.history_enabled() { self.db.clone() } else { None };
+        let links_db = self.db.clone();
         let tx = self.tx.clone();
         self.pending = Some(Pending { generation, item, opts });
         let spawned = std::thread::Builder::new().name("prepare".into()).spawn(move || {
@@ -223,12 +228,27 @@ impl Core {
                 }
                 _ => None,
             };
-            let _ =
-                tx.send(CoreMsg::Prepared(Box::new(Prepared { generation, media_key, history })));
+            let sub_links = match (&links_db, &media_key) {
+                (Some(db), Some(key)) => {
+                    let key = key.clone();
+                    db.call(move |c| sub_links::for_media(c, &key)).unwrap_or_else(|err| {
+                        tracing::warn!("subtitle link lookup failed: {err}");
+                        Vec::new()
+                    })
+                }
+                _ => Vec::new(),
+            };
+            let prepared = Prepared { generation, media_key, history, sub_links };
+            let _ = tx.send(CoreMsg::Prepared(Box::new(prepared)));
         });
         if let Err(err) = spawned {
             tracing::warn!("could not start the prepare thread ({err}); loading without history");
-            self.on_prepared(Box::new(Prepared { generation, media_key: None, history: None }));
+            self.on_prepared(Box::new(Prepared {
+                generation,
+                media_key: None,
+                history: None,
+                sub_links: Vec::new(),
+            }));
         }
     }
 
@@ -283,6 +303,7 @@ impl Core {
             item_id: item.id,
             media_key: prepared.media_key,
             history: prepared.history,
+            sub_links: prepared.sub_links,
             resumed_at,
             offer_resume,
         });
@@ -300,6 +321,8 @@ impl Core {
         let duration = self.mpv.get_f64("duration");
         self.queue.on_loaded(title.as_deref(), duration, current.media_key.as_deref());
 
+        // Before per-file memory, so a remembered external track is there to be chosen.
+        self.attach_sub_links(&current.sub_links);
         if self.config.playback.remember_per_file {
             if let Some(entry) = &current.history {
                 self.restore_memory(entry);
