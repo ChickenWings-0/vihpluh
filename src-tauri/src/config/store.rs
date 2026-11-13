@@ -44,6 +44,8 @@ pub struct ConfigStore {
 impl ConfigStore {
     /// Loads `path` (a missing file means "all defaults").
     pub fn open(path: PathBuf) -> (Arc<Self>, Vec<ConfigWarning>) {
+        // An older file is upgraded in place first, keeping a `.bak` (§9.3).
+        super::migrate::run(&path, super::schema::SCHEMA_VERSION, super::migrate::CONFIG_STEPS);
         let loaded = super::load(&path);
         let store = Arc::new(Self {
             path,

@@ -57,6 +57,7 @@ describe("normalize", () => {
 
 const keymap: ResolvedKeymap = {
   base: "vihpluh",
+  defaults: {},
   contexts: {
     global: {
       "player.toggle_pause": ["Space", "K"],

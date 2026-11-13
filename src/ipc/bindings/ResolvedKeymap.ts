@@ -14,6 +14,11 @@ base: string,
  */
 contexts: { [key in string]: { [key in string]: Array<string> } }, 
 /**
+ * The base keymap alone, in the same shape: what "reset" goes back to, and what the
+ * hotkey editor compares with to mark a changed row.
+ */
+defaults: { [key in string]: { [key in string]: Array<string> } }, 
+/**
  * Evaluated before the context bindings.
  */
 custom: Array<CustomBinding>, 

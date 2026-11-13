@@ -5,6 +5,7 @@
 
 pub mod eq_presets;
 pub mod keybinds;
+pub mod migrate;
 pub mod schema;
 pub mod store;
 pub mod watch;
