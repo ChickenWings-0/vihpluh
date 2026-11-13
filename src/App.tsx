@@ -15,6 +15,7 @@ import { ResizeZones } from "./features/chrome/ResizeZones";
 import { useAutoHide } from "./features/chrome/useAutoHide";
 import { useKeyboard } from "./features/chrome/useKeyboard";
 import { DebugOverlay } from "./features/debug/DebugOverlay";
+import { Dock } from "./features/dock/Dock";
 import { IdleScreen } from "./features/idle/IdleScreen";
 import { appReady } from "./ipc/commands";
 import { useAppStore } from "./stores/app";
@@ -59,6 +60,7 @@ export function App() {
         {import.meta.env.DEV && !zen && <DebugOverlay info={info} />}
         <OsdFlash />
         <Chrome />
+        <Dock />
         <ContextMenu />
         <Toasts />
         <DropHint />

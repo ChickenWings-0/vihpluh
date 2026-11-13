@@ -5,4 +5,8 @@ import type { OsdKind } from "./OsdKind";
 /**
  * `osd://show` — a notice that originates in the core.
  */
-export type OsdEvent = { kind: OsdKind, text: string, icon?: string, value?: number, action?: OsdAction, };
+export type OsdEvent = { kind: OsdKind, text: string, icon?: string, value?: number, action?: OsdAction, 
+/**
+ * A newer toast with the same group replaces the older one instead of stacking.
+ */
+group?: string, };

@@ -2,13 +2,24 @@
  * Connects the stores to the core: subscribes first, then fetches snapshots, so nothing that
  * happens in between is lost. A missed patch (revision gap) triggers a fresh snapshot.
  */
-import { appInfo, configGet, keybindsGet, playerSnapshot, windowGetState } from "@/ipc/commands";
+import { dispatch } from "@/actions/registry";
+import {
+  appInfo,
+  configGet,
+  keybindsGet,
+  playerSnapshot,
+  queueSnapshot,
+  sessionUiGet,
+  sessionUiSet,
+  windowGetState,
+} from "@/ipc/commands";
 import {
   onConfigChanged,
   onKeybindsChanged,
   onOsd,
   onPlayerPatch,
   onPlayerTime,
+  onQueueChanged,
   onWindowState,
 } from "@/ipc/events";
 import { useAppStore } from "./app";
@@ -16,8 +27,9 @@ import { useConfigStore } from "./config";
 import { useKeymapStore } from "./keymap";
 import { reportError, useOsdStore } from "./osd";
 import { usePlayerStore } from "./player";
-import { receiveTime, setClock } from "./time";
-import { useUiStore } from "./ui";
+import { useQueueStore } from "./queue";
+import { receiveTime, resetTime, setClock } from "./time";
+import { setUiPersister, useUiStore } from "./ui";
 
 export function startSync(): () => void {
   let refetching = false;
@@ -40,9 +52,25 @@ export function startSync(): () => void {
     onConfigChanged(({ path, value }) => useConfigStore.getState().applyChange(path, value)),
     onKeybindsChanged((keymap) => useKeymapStore.getState().setKeymap(keymap)),
     onWindowState((state) => useUiStore.getState().setWindow(state)),
+    onQueueChanged((queue) => useQueueStore.getState().setQueue(queue)),
     // Core notices need reading or carry an action: they are toasts (DESIGN_SYSTEM §8.9).
     onOsd((osd) => {
-      useOsdStore.getState().pushToast({ kind: osd.kind, text: osd.text });
+      const action = osd.action;
+      useOsdStore.getState().pushToast({
+        kind: osd.kind,
+        text: osd.text,
+        action: action
+          ? {
+              label: action.label,
+              run: () =>
+                void dispatch(action.actionId, {
+                  trigger: "button",
+                  args: action.args as Record<string, unknown> | undefined,
+                }),
+            }
+          : undefined,
+        group: osd.group,
+      });
     }),
   ];
 
@@ -59,11 +87,23 @@ export function startSync(): () => void {
     ) {
       return;
     }
+    // Nothing loaded: the bar must not keep showing the last file's time and buffer.
+    if (state.status === "idle") {
+      resetTime();
+      return;
+    }
     const forward = state.direction === "forward" ? 1 : -1;
     setClock(state.status === "playing", state.speed * forward);
   });
 
+  setUiPersister((patch) => void sessionUiSet(patch).catch(reportError));
   refetch();
+  queueSnapshot()
+    .then((queue) => useQueueStore.getState().setQueue(queue))
+    .catch(reportError);
+  sessionUiGet()
+    .then((ui) => useUiStore.getState().hydrate(ui))
+    .catch(reportError);
   configGet()
     .then((config) => useConfigStore.getState().setConfig(config))
     .catch(reportError);

@@ -4,6 +4,7 @@ import type { DebugStats } from "./bindings/DebugStats";
 import type { OpenEvent } from "./bindings/OpenEvent";
 import type { OsdEvent } from "./bindings/OsdEvent";
 import type { PlayerState } from "./bindings/PlayerState";
+import type { QueueState } from "./bindings/QueueState";
 import type { ResolvedKeymap } from "./bindings/ResolvedKeymap";
 import type { TimeEvent } from "./bindings/TimeEvent";
 import type { WindowState } from "./bindings/WindowState";
@@ -29,6 +30,9 @@ export const onAppOpen = (handler: (open: OpenEvent) => void): Unlisten =>
 
 export const onDebugStats = (handler: (stats: DebugStats) => void): Unlisten =>
   listen<DebugStats>("debug://stats", handler);
+
+export const onQueueChanged = (handler: (queue: QueueState) => void): Unlisten =>
+  listen<QueueState>("queue://changed", handler);
 
 export const onKeybindsChanged = (handler: (keymap: ResolvedKeymap) => void): Unlisten =>
   listen<ResolvedKeymap>("keybinds://changed", handler);

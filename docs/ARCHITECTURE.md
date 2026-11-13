@@ -543,7 +543,8 @@ stateDiagram-v2
 ```
 
 `status: "idle" | "loading" | "playing" | "paused" | "buffering" | "seeking" | "ended" | "error"`.
-After 3 consecutive `Error` transitions auto-advance stops and an error toast lists the failures.
+After 3 consecutive `Error` transitions auto-advance stops and an error toast lists the failures. Each skipped
+file's toast and that summary share one toast group, so a run of bad files ends as a single notice.
 
 ### 6.5 Load pipeline (what happens on every file load)
 
@@ -824,7 +825,7 @@ Window dragging and resize-edge dragging use Tauri's window API directly via `tr
 | `config://changed` | `{ path: string, value: Json }` | On `config_set` or external file edit (watched) |
 | `keybinds://changed` | `ResolvedKeymap` | On change |
 | `window://state` | `WindowState` | Mode, maximize, focus, or always-on-top changed |
-| `osd://show` | `{ kind: "info" \| "warn" \| "error", text: string, icon?: string, value?: number, action?: { label: string, actionId: string } }` | Core-originated notices (resume, hwdec fallback, errors) |
+| `osd://show` | `{ kind: "info" \| "warn" \| "error", text: string, icon?: string, value?: number, action?: { label: string, actionId: string, args? }, group?: string }` | Core-originated notices (resume, hwdec fallback, errors) |
 | `media://waveform` | `{ mediaKey, trackId, status, progress: number }` | Job progress, 4 Hz |
 | `media://cues` | `{ mediaKey, trackId, coverage }` | Cue index grew/finished |
 | `library://scan` | `{ folderId, scanned: number, total: number \| null, done: boolean }` | 4 Hz during scans |
@@ -1474,6 +1475,7 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D25 | Media keys are handled only through the OS media controls (SMTC / MPRIS); the frontend ignores `Media*` key events | They arrive through the OS even when vihpluh is unfocused; handling the key events as well would toggle twice. |
 | D26 | All menus, including the context menu, are one Radix dropdown primitive; the context menu is anchored to an invisible point | It opens the same way from a right-click, the ContextMenu key, or Shift+F10, and shares the menu renderer that shows live shortcuts. |
 | D27 | Pointer presses on sliders (seek bar, cone, parameter sliders) do not focus them; Tab does | DESIGN_SYSTEM §13: pointer use never leaves focus on chrome, so single-key shortcuts keep working and Escape is not spent returning focus. |
+| D28 | Toasts may carry a `group`; a newer toast of the same group replaces the older one in place | Three unplayable files in a row would otherwise stack two skip notices under the summary; the plan asks for one summary toast. |
 
 ### Open risks (each owned by a Phase 1 spike)
 

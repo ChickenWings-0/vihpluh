@@ -1,10 +1,11 @@
 /**
  * Files dragged from the OS onto the window (DESIGN_SYSTEM §10.7): dropping on the video
- * replaces what is playing. Shift-drop to enqueue arrives with the queue in Phase 4. A hint
- * overlay says what will happen.
+ * replaces what is playing; dropping on the queue panel inserts at the line under the pointer.
+ * A hint overlay says what a drop on the video will do. (A Shift-drop cannot be detected
+ * during an OS drag in the webview, so "enqueue" is done by dropping on the queue.)
  */
 import { useEffect } from "react";
-import { playerOpen } from "@/ipc/commands";
+import { playerOpen, queueAdd } from "@/ipc/commands";
 import { onFileDrop } from "@/ipc/transport";
 import { reportError } from "@/stores/osd";
 import { useUiStore } from "@/stores/ui";
@@ -14,13 +15,21 @@ export function useFileDrop(): void {
     () =>
       onFileDrop((event) => {
         const ui = useUiStore.getState();
+        const index = event.type === "leave" ? null : (ui.dropResolver?.(event.x, event.y) ?? null);
         if (event.type === "enter" || event.type === "over") {
-          if (ui.dropHint !== "replace") ui.setDropHint("replace");
+          ui.setDropIndex(index);
+          const hint = index === null ? "replace" : null;
+          if (ui.dropHint !== hint) ui.setDropHint(hint);
           return;
         }
         ui.setDropHint(null);
+        ui.setDropIndex(null);
         if (event.type === "drop" && event.paths.length > 0) {
-          void playerOpen({ sources: event.paths, mode: "replace" }).catch(reportError);
+          const done =
+            index === null
+              ? playerOpen({ sources: event.paths, mode: "replace" })
+              : queueAdd(event.paths, index);
+          void done.catch(reportError);
         }
       }),
     [],

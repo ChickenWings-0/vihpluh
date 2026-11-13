@@ -55,7 +55,7 @@ export function getCacheEnd(): number {
   return sample.cacheEnd;
 }
 
-/** Test helper. */
+/** Back to "nothing loaded" (also used by tests). */
 export function resetTime(): void {
   sample = { pos: 0, dur: 0, cacheEnd: 0, receivedAt: 0 };
   advancing = false;

@@ -3,12 +3,18 @@ import type { AbLoop } from "./bindings/AbLoop";
 import type { AppInfo } from "./bindings/AppInfo";
 import type { Config } from "./bindings/Config";
 import type { Direction } from "./bindings/Direction";
+import type { Margins } from "./bindings/Margins";
 import type { OpenRequest } from "./bindings/OpenRequest";
 import type { PickKind } from "./bindings/PickKind";
 import type { PlayerState } from "./bindings/PlayerState";
+import type { QueueState } from "./bindings/QueueState";
+import type { RecentEntry } from "./bindings/RecentEntry";
+import type { Repeat } from "./bindings/Repeat";
 import type { ResolvedKeymap } from "./bindings/ResolvedKeymap";
 import type { SeekRequest } from "./bindings/SeekRequest";
 import type { TrackSlot } from "./bindings/TrackSlot";
+import type { UiPatch } from "./bindings/UiPatch";
+import type { UiState } from "./bindings/UiState";
 import type { WindowMode } from "./bindings/WindowMode";
 import type { WindowState } from "./bindings/WindowState";
 import { invoke } from "./transport";
@@ -17,6 +23,8 @@ import { invoke } from "./transport";
 export const appInfo = () => invoke<AppInfo>("app_info");
 export const appReady = () => invoke<void>("app_ready");
 export const appQuit = () => invoke<void>("app_quit");
+/** Shows a file selected in the system file manager. */
+export const appReveal = (path: string) => invoke<void>("app_reveal", { path });
 /** Native open dialog; resolves to `[]` when cancelled. */
 export const appPickMedia = (kind: PickKind) => invoke<string[]>("app_pick_media", { kind });
 
@@ -50,6 +58,30 @@ export const tracksSelect = (kind: TrackSlot, id: number | null) =>
 export const audioSetDelay = (ms: number) => invoke<void>("audio_set_delay", { ms });
 export const subSetDelay = (ms: number) => invoke<void>("sub_set_delay", { ms });
 export const subSetVisible = (visible: boolean) => invoke<void>("sub_set_visible", { visible });
+
+// ── queue ────────────────────────────────────────────────────────────────────
+export const queueSnapshot = () => invoke<QueueState>("queue_snapshot");
+export const queueAdd = (sources: string[], at?: number) =>
+  invoke<void>("queue_add", { sources, at: at ?? null });
+export const queueRemove = (ids: string[]) => invoke<void>("queue_remove", { ids });
+export const queueMove = (ids: string[], toIndex: number) =>
+  invoke<void>("queue_move", { ids, toIndex });
+export const queueClear = (keepCurrent: boolean) => invoke<void>("queue_clear", { keepCurrent });
+export const queuePlay = (id: string) => invoke<void>("queue_play", { id });
+export const queueNext = () => invoke<void>("queue_next");
+export const queuePrev = () => invoke<void>("queue_prev");
+export const queueSetRepeat = (mode: Repeat) => invoke<void>("queue_set_repeat", { mode });
+export const queueSetShuffle = (enabled: boolean) => invoke<void>("queue_set_shuffle", { enabled });
+export const queueSetStopAfterCurrent = (enabled: boolean) =>
+  invoke<void>("queue_set_stop_after_current", { enabled });
+
+// ── library / session ────────────────────────────────────────────────────────
+export const libraryRecent = (limit: number) => invoke<RecentEntry[]>("library_recent", { limit });
+export const sessionUiGet = () => invoke<UiState>("session_ui_get");
+export const sessionUiSet = (patch: UiPatch) => invoke<void>("session_ui_set", { patch });
+
+// ── video ────────────────────────────────────────────────────────────────────
+export const videoSetMargins = (req: Margins) => invoke<void>("video_set_margins", { req });
 
 // ── keybinds ─────────────────────────────────────────────────────────────────
 export const keybindsGet = () => invoke<ResolvedKeymap>("keybinds_get");

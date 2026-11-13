@@ -22,6 +22,8 @@ use crate::window::WindowMode;
 const POSITION_SAVE_EVERY: Duration = Duration::from_secs(5);
 /// Session writes are debounced (§9.4).
 const SESSION_DEBOUNCE: Duration = Duration::from_secs(1);
+/// Toast group for unplayable-file notices.
+const QUEUE_ERRORS: &str = "queue-errors";
 
 /// Per-load options from the request that caused it.
 #[derive(Debug, Clone, Default)]
@@ -175,7 +177,8 @@ impl Core {
                     failed.len(),
                     failed.join(", ")
                 );
-                self.emit(events::OSD_SHOW, &OsdEvent::new(OsdKind::Error, text));
+                let osd = OsdEvent::new(OsdKind::Error, text).grouped(QUEUE_ERRORS);
+                self.emit(events::OSD_SHOW, &osd);
             }
             Decision::Nothing => {}
         }
@@ -355,7 +358,19 @@ impl Core {
         self.apply(effects);
         if let Some(message) = failed {
             self.current = None;
+            // Name the queue's item: the mirrored media may still be the previous file.
+            let title = self.queue.current().map(|item| item.title.clone());
             let decision = self.queue.on_error(&message, self.config.playback.at_queue_end);
+            // Skips share one toast with the 3-strike summary, so a run of bad files ends
+            // as a single notice instead of a stack.
+            if !matches!(decision, Decision::GiveUp(_)) {
+                let text = match &title {
+                    Some(name) if !name.is_empty() => format!("Can't play {name}: {message}"),
+                    _ => format!("Can't play this file: {message}"),
+                };
+                let osd = OsdEvent::new(OsdKind::Error, text).grouped(QUEUE_ERRORS);
+                self.emit(events::OSD_SHOW, &osd);
+            }
             self.apply_decision(decision, LoadOpts::default());
         }
     }

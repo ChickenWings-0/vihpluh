@@ -676,14 +676,6 @@ impl Core {
         if effects.loaded {
             self.software_notice_shown = false;
         }
-        if let Some(reason) = &effects.failed {
-            let name = self.mirror.state.media.as_ref().map(|m| m.title.clone());
-            let text = match name {
-                Some(name) if !name.is_empty() => format!("Can't play {name}: {reason}"),
-                _ => format!("Can't play this file: {reason}"),
-            };
-            self.emit(events::OSD_SHOW, &OsdEvent::new(OsdKind::Error, text));
-        }
         if effects.ended {
             self.on_ended();
         }

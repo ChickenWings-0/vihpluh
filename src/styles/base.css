@@ -68,6 +68,19 @@
   --ease-*: initial;
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* The "now playing" level glyph: the only looping animation besides progress (§12). */
+  --animate-level: vihpluh-level 900ms ease-in-out infinite;
+
+  @keyframes vihpluh-level {
+    0%,
+    100% {
+      transform: scaleY(0.35);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
 }
 
 @layer base {
@@ -142,5 +155,9 @@
 
   .duo-accent {
     fill: var(--accent);
+  }
+
+  :root[data-reduce-motion="true"] .animate-level {
+    animation: none;
   }
 }

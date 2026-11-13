@@ -259,36 +259,49 @@ widths.
 
 ---
 
-## 6. Phase 4 — Queue, session, resume — ☐ not started
+## 6. Phase 4 — Queue, session, resume — ☑ closed (Windows, 2026-11-13) — Linux pending; two hands-on checks pending (see notes)
 
 **Goal:** multi-file playback that never interrupts: queue panel, folder auto-queue, resume, session restore.
 
-- [ ] `queue/mod.rs`: full semantics of A§8.1 (replace/enqueue/play-next, folder auto-fill with natural sort, repeat, shuffle order, previous-restarts rule, stop-after-current, error skip + 3-strike stop). Exhaustive unit tests.
-- [ ] `queue_*` commands + `queue://changed`; core load pipeline steps 1, 3 of A§6.5 (layers arrive in Phase 8).
-- [ ] `media/identity.rs`: `media_key` (oshash + URL hash) with test vectors.
-- [ ] `library/db.rs`: connection thread, migration runner, `0001_init.sql` (A§9.6) — only `history` is used this phase.
-- [ ] Resume (A§6.5): periodic position writes, finished marking, `playback.resume` modes, resume toast with "Start over".
-- [ ] Per-file memory: last audio/sub track (as `TrackRule`), delays (`playback.remember_per_file`).
-- [ ] `queue/session.rs`: `session.json` write/restore (A§9.4), `session_ui_get/set`.
-- [ ] Right dock container (D§6.3): dock vs overlay, `video_set_margins` animation, resize handle.
-- [ ] **Queue panel** (D§10.7): virtualised list, now-playing row, drag reorder (dnd-kit), multi-select, row menu, header actions, OS file drop at position, undo toast on remove.
-- [ ] Previous/Next buttons enabled state; `queue.*` actions; queue-context shortcuts.
-- [ ] Idle screen: Continue watching + Recent folders from `history`.
+- [x] `queue/mod.rs`: full semantics of A§8.1 (replace/enqueue/play-next, folder auto-fill with natural sort, repeat, shuffle order, previous-restarts rule, stop-after-current, error skip + 3-strike stop). Exhaustive unit tests.
+- [x] `queue_*` commands + `queue://changed`; core load pipeline steps 1, 3 of A§6.5 (layers arrive in Phase 8).
+- [x] `media/identity.rs`: `media_key` (oshash + URL hash) with test vectors.
+- [x] `library/db.rs`: connection thread, migration runner, `0001_init.sql` (A§9.6) — only `history` is used this phase.
+- [x] Resume (A§6.5): periodic position writes, finished marking, `playback.resume` modes, resume toast with "Start over".
+- [x] Per-file memory: last audio/sub track (as `TrackRule`), delays (`playback.remember_per_file`).
+- [x] `queue/session.rs`: `session.json` write/restore (A§9.4), `session_ui_get/set`.
+- [x] Right dock container (D§6.3): dock vs overlay, `video_set_margins` animation, resize handle.
+- [x] **Queue panel** (D§10.7): virtualised list, now-playing row, drag reorder (dnd-kit), multi-select, row menu, header actions, OS file drop at position, undo toast on remove. *(The OS drop is implemented but not yet exercised; see notes.)*
+- [x] Previous/Next buttons enabled state; `queue.*` actions; queue-context shortcuts.
+- [x] Idle screen: Continue watching + Recent folders from `history`.
 
 ### Verification
 
-- [ ] Open one episode from T6 → queue fills with the folder in natural order (`E2` before `E10`), current item highlighted; Next/Previous walk it; reaching the end holds the last frame.
-- [ ] Drag-reorder, multi-remove + Undo, Play next, Clear (keeps current) all behave and never interrupt playback (audio continuity check by ear).
-- [ ] Dropping 3 files on the panel inserts at the drop line; dropping on the video replaces; Shift-drop enqueues.
-- [ ] Shuffle plays every item exactly once before repeating; turning it off resumes list order from the current item.
-- [ ] Quit mid-episode, relaunch → same queue, same item, paused at the same position (±1 s). `--no-session` starts clean.
-- [ ] Reopen a half-watched file directly → resumes 3 s early with the toast; "Start over" works; a file watched past 95 % starts from 0.
-- [ ] Change audio track + subtitle delay on a file, reopen it → both restored.
-- [ ] T12 files in a queue are marked with an error and skipped; three bad files in a row stop with one summary toast.
-- [ ] Dock opens with the video shrinking smoothly (windowed) and overlays in fullscreen; picture is never covered in dock mode.
-- [ ] `library.track_history = false` → no rows written (inspect DB), no resume, idle screen shows only open buttons.
+- [x] Open one episode from T6 → queue fills with the folder in natural order (`E2` before `E10`), current item highlighted; Next/Previous walk it; reaching the end holds the last frame.
+- [ ] Drag-reorder, multi-remove + Undo, Play next, Clear (keeps current) all behave and never interrupt playback (audio continuity check by ear). *(**W**: all four behave, and the playing file, its status, and its position were unaffected throughout. The by-ear check is left for a person; verification runs are muted.)*
+- [ ] Dropping 3 files on the panel inserts at the drop line; dropping on the video replaces; Shift-drop enqueues. *(Needs a person with a real pointer. A Shift-drop cannot be detected during an OS drag in the webview, so enqueue is done by dropping on the panel.)*
+- [x] Shuffle plays every item exactly once before repeating; turning it off resumes list order from the current item.
+- [x] Quit mid-episode, relaunch → same queue, same item, paused at the same position (±1 s). `--no-session` starts clean.
+- [x] Reopen a half-watched file directly → resumes 3 s early with the toast; "Start over" works; a file watched past 95 % starts from 0.
+- [x] Change audio track + subtitle delay on a file, reopen it → both restored.
+- [x] T12 files in a queue are marked with an error and skipped; three bad files in a row stop with one summary toast.
+- [x] Dock opens with the video shrinking smoothly (windowed) and overlays in fullscreen; picture is never covered in dock mode.
+- [x] `library.track_history = false` → no rows written (inspect DB), no resume, idle screen shows only open buttons.
 
 **Platforms:** W + L-Wayland.
+
+**Phase 4 notes (2026-11-13, Windows only).** Checked through the webview's DevTools channel in
+the quiet, muted test build: the queue's mpv-side effects through the commands, and the panel
+through synthetic pointer and key input sent to the webview only. Dock mode set mpv's right
+margin to exactly the panel width (0.28125 at 360 / 1280 px) and back to 0 on close; fullscreen
+overlays with margin 0. Session restore came back paused at 101.46 s for a pause at 101.46 s;
+reopening resumed at 98.1 s for a stop at 101 s; Start over landed at 0.96 s. With history off,
+the history table was byte-for-byte unchanged (row count, latest timestamp, positions). Still to
+do by hand: an OS drag-and-drop onto the panel and the video, and the by-ear continuity check.
+Fixed along the way: the idle bottom bar kept the last file's time and buffer; the queue total
+counted only loaded items (partial sums now end in "+"); idle "Continue watching" listed files
+the core would not resume (under 60 s); a run of bad files stacked a toast per file and one named
+the wrong file (toasts now carry a group, D28, and the name comes from the queue item).
 
 ---
 

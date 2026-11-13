@@ -516,7 +516,7 @@ Right-click on queue rows, library items, bookmarks, and the seek bar opens thei
 - Seeking OSD shows `12:34 / 47:10` plus a thin progress bar.
 
 **Toasts** — for things that need reading or have an action. Bottom-left, above the bottom bar, stack up to 3, 320 px wide,
-`--bg-raised`, radius 6. Layout: `[status icon] message  [Action]  [✕]`. Auto-dismiss 5 s (errors persist until dismissed).
+`--bg-raised`, radius 6. Layout: `[status icon] message  [Action]  [✕]`. Auto-dismiss 5 s (errors persist until dismissed). A toast of the same group (e.g. unplayable-file notices) replaces the previous one instead of stacking.
 Examples: "Resumed at 12:34 · **Start over**", "Bookmark added at 23:41 · **Rename**", "Removed 3 items from queue · **Undo**",
 "Software decoding — no hardware decoder for AV1 · **Details**".
 

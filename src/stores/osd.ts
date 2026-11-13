@@ -21,6 +21,8 @@ export interface Toast {
   kind: "info" | "warn" | "error" | "success";
   text: string;
   action?: { label: string; run: () => void };
+  /** A newer toast of the same group takes this one's place. */
+  group?: string;
 }
 
 const TOAST_LIMIT = 3;
@@ -50,8 +52,14 @@ export const useOsdStore = create<OsdStore>((set, get) => ({
   },
   pushToast: (toast) => {
     const id = nextId++;
-    // Newest at the end; the oldest is dropped past the limit.
-    set({ toasts: [...get().toasts, { ...toast, id }].slice(-TOAST_LIMIT) });
+    const toasts = get().toasts;
+    const slot = toast.group ? toasts.findIndex((t) => t.group === toast.group) : -1;
+    if (slot >= 0) {
+      set({ toasts: toasts.map((t, i) => (i === slot ? { ...toast, id } : t)) });
+    } else {
+      // Newest at the end; the oldest is dropped past the limit.
+      set({ toasts: [...toasts, { ...toast, id }].slice(-TOAST_LIMIT) });
+    }
     if (toast.kind !== "error") {
       setTimeout(() => get().dismissToast(id), TOAST_MS);
     }

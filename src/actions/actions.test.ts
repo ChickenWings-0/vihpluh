@@ -34,8 +34,8 @@ describe("action registry", () => {
   });
 
   it("disables placeholders", () => {
-    expect(getAction("queue.next")?.comingIn).toBe("Phase 4");
-    expect(isEnabled("queue.next")).toBe(false);
+    expect(getAction("queue.save_as_playlist")?.comingIn).toBe("Phase 9");
+    expect(isEnabled("queue.save_as_playlist")).toBe(false);
     expect(isEnabled("app.quit")).toBe(true);
   });
 

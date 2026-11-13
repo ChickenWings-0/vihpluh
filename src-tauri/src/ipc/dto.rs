@@ -373,6 +373,10 @@ pub struct OsdEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub action: Option<OsdAction>,
+    /// A newer toast with the same group replaces the older one instead of stacking.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -389,7 +393,12 @@ pub struct OsdAction {
 
 impl OsdEvent {
     pub fn new(kind: OsdKind, text: impl Into<String>) -> Self {
-        Self { kind, text: text.into(), icon: None, value: None, action: None }
+        Self { kind, text: text.into(), icon: None, value: None, action: None, group: None }
+    }
+
+    pub fn grouped(mut self, group: &str) -> Self {
+        self.group = Some(group.to_string());
+        self
     }
 }
 

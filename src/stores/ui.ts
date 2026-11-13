@@ -4,10 +4,17 @@
  * (panel state joins `session.json` in Phase 4).
  */
 import { create } from "zustand";
+import type { UiState } from "@/ipc/bindings/UiState";
 import type { WindowState } from "@/ipc/bindings/WindowState";
 import type { KeyContext } from "@/keybinds/engine";
 
 export type DropHint = "replace" | "enqueue" | null;
+
+/** The right dock hosts one panel at a time (DESIGN_SYSTEM §6.1). */
+export type DockPanel = "queue" | "sidebar" | null;
+
+/** Maps a drop point to a queue position when the pointer is over the queue panel. */
+export type DropResolver = (x: number, y: number) => number | null;
 
 interface UiStore {
   window: WindowState;
@@ -27,6 +34,13 @@ interface UiStore {
   pointer: { x: number; y: number };
   keyContext: KeyContext;
   dropHint: DropHint;
+  dock: DockPanel;
+  sidebarTab: string;
+  /** Live width while the dock edge is being dragged (CSS px); null otherwise. */
+  dockDragWidth: number | null;
+  dropResolver: DropResolver | null;
+  /** Where a file drop over the queue would land (insertion line), or null. */
+  dropIndex: number | null;
 
   setWindow: (window: WindowState) => void;
   setZen: (zen: boolean) => void;
@@ -38,6 +52,20 @@ interface UiStore {
   setPointer: (x: number, y: number) => void;
   setKeyContext: (context: KeyContext) => void;
   setDropHint: (hint: DropHint) => void;
+  /** Opens a panel in the dock (or closes it when it is already open). */
+  toggleDock: (panel: Exclude<DockPanel, null>) => void;
+  setDock: (panel: DockPanel) => void;
+  setDockDragWidth: (width: number | null) => void;
+  setDropResolver: (resolver: DropResolver | null) => void;
+  setDropIndex: (index: number | null) => void;
+  /** Restores panels from the session (`session_ui_get`). */
+  hydrate: (ui: UiState) => void;
+}
+
+/** Saves panel state to `session.json`; injected by the sync layer to keep IPC out of here. */
+let persistUi: (patch: Partial<UiState>) => void = () => {};
+export function setUiPersister(fn: (patch: Partial<UiState>) => void): void {
+  persistUi = fn;
 }
 
 export const useUiStore = create<UiStore>((set, get) => ({
@@ -53,6 +81,11 @@ export const useUiStore = create<UiStore>((set, get) => ({
   pointer: { x: 0, y: 0 },
   keyContext: "global",
   dropHint: null,
+  dock: null,
+  sidebarTab: "subtitles",
+  dockDragWidth: null,
+  dropResolver: null,
+  dropIndex: null,
 
   setWindow: (window) => set({ window }),
   setZen: (zen) => set({ zen, zenHintShown: get().zenHintShown || zen }),
@@ -76,6 +109,22 @@ export const useUiStore = create<UiStore>((set, get) => ({
   setPointer: (x, y) => set({ pointer: { x, y } }),
   setKeyContext: (keyContext) => set({ keyContext }),
   setDropHint: (dropHint) => set({ dropHint }),
+  toggleDock: (panel) => get().setDock(get().dock === panel ? null : panel),
+  setDock: (dock) => {
+    if (get().dock === dock) return;
+    set({ dock });
+    persistUi({ queueOpen: dock === "queue", sidebarOpen: dock === "sidebar" });
+  },
+  setDockDragWidth: (dockDragWidth) => set({ dockDragWidth }),
+  setDropResolver: (dropResolver) => set({ dropResolver }),
+  setDropIndex: (dropIndex) => {
+    if (get().dropIndex !== dropIndex) set({ dropIndex });
+  },
+  hydrate: (ui) =>
+    set({
+      dock: ui.queueOpen ? "queue" : ui.sidebarOpen ? "sidebar" : null,
+      sidebarTab: ui.sidebarTab,
+    }),
 }));
 
 export const isHeld = (holds: Record<string, true>) => Object.keys(holds).length > 0;
