@@ -27,6 +27,12 @@ const ON_ACCENT_LIGHT = "#FFFFFF";
 const MIN_TEXT_CONTRAST = 4.5;
 /** Control boundaries and the focus ring against their surface (§13). */
 const MIN_EDGE_CONTRAST = 3;
+/**
+ * Accent fills (slider fills, toggle tracks, the played part of the seek bar) against the
+ * surface. Lower than the edge rule on purpose: it catches an accent that vanishes into the
+ * theme without recolouring the light ones the swatches include (Amber is 2.1:1 on white).
+ */
+const MIN_FILL_CONTRAST = 2;
 
 export function isHex(text: string): boolean {
   return /^#[0-9a-f]{6}$/i.test(text);
@@ -147,7 +153,10 @@ const SURFACE: Record<"dark" | "light", Rgb> = { dark: [22, 22, 26], light: [255
 
 /** Every accent-derived token for a colour and theme (§2.3). A bad colour gives the default's. */
 export function deriveAccent(hex: string, theme: "dark" | "light"): AccentTokens {
-  const accent = parseHex(hex) ?? (parseHex(DEFAULT_ACCENT) as Rgb);
+  const chosen = parseHex(hex) ?? (parseHex(DEFAULT_ACCENT) as Rgb);
+  // A pale accent on the light theme (or a dark one on the dark theme) is moved just far
+  // enough to show as a fill; everything else derives from that.
+  const accent = readableOn(chosen, SURFACE[theme], MIN_FILL_CONTRAST);
   const [r, g, b] = accent;
   const dark = parseHex(ON_ACCENT_DARK) as Rgb;
   const text = toHex(readableOn(accent, SURFACE[theme]));

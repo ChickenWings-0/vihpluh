@@ -590,6 +590,10 @@ pub struct OpenRequest {
     #[serde(default)]
     #[ts(optional)]
     pub preset_id: Option<String>,
+    /// Names for some of `sources` (stream-list channels), filled in by the core, not the UI.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub titles: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]

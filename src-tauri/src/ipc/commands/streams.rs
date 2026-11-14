@@ -12,6 +12,22 @@ fn db(state: &AppState) -> AppResult<&Arc<Db>> {
     state.db.as_ref().ok_or_else(|| AppError::unsupported("the library database is unavailable"))
 }
 
+/// The channel names stream lists give the URLs among `sources`, so the queue shows them.
+/// Runs on the calling (worker) thread; an unavailable database just means no names.
+pub fn channel_titles(
+    state: &AppState,
+    sources: &[String],
+) -> std::collections::HashMap<String, String> {
+    let urls: Vec<String> = sources.iter().filter(|s| crate::cli::is_url(s)).cloned().collect();
+    match (&state.db, urls.is_empty()) {
+        (Some(db), false) => db.call(move |c| iptv::names_for(c, &urls)).unwrap_or_else(|err| {
+            tracing::warn!("channel name lookup failed: {err}");
+            Default::default()
+        }),
+        _ => Default::default(),
+    }
+}
+
 #[tauri::command(async)]
 pub fn streams_sources(state: State<'_, AppState>) -> AppResult<Vec<StreamSource>> {
     Ok(db(&state)?.call(|c| iptv::sources(c))?)

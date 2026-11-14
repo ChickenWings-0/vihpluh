@@ -17,6 +17,7 @@ pub fn player_open(state: State<'_, AppState>, mut req: OpenRequest) -> AppResul
     if req.sources.is_empty() {
         return Err(AppError::not_found("nothing playable there"));
     }
+    req.titles = super::streams::channel_titles(&state, &req.sources);
     state.player.open(req);
     Ok(())
 }

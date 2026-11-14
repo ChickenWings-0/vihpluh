@@ -162,7 +162,8 @@ export const SETTINGS: Record<SettingPath, SettingDef> = {
   },
   "general.screenshot_template": {
     label: "Screenshot file name",
-    tooltip: "mpv template: %F = file name, %wH.%wM.%wS = timestamp.",
+    tooltip:
+      "mpv template: %F = file name, %wH.%wM.%wS = timestamp. A name already taken gets -0001, -0002….",
     control: { kind: "text", mono: true },
     keywords: ["capture", "snapshot", "template"],
   },

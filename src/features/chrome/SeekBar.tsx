@@ -23,6 +23,7 @@ import {
   useState,
   type WheelEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { dispatch } from "@/actions";
 import { DropdownMenu, MenuContent, type MenuEntry, separator } from "@/components/Menu";
 import { playerSeek, playerSetAbLoop } from "@/ipc/commands";
@@ -469,13 +470,18 @@ export function SeekBar() {
             if (!open) closeMenu();
           }}
         >
-          <DropdownMenu.Trigger asChild>
-            <div
-              aria-hidden="true"
-              className="pointer-events-none fixed h-0 w-0"
-              style={{ left: menu.x, top: menu.y }}
-            />
-          </DropdownMenu.Trigger>
+          {/* The bottom bar slides with a CSS translate, which makes it the containing
+              block of anything `fixed` inside it: the anchor lives on <body> instead. */}
+          {createPortal(
+            <DropdownMenu.Trigger asChild>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none fixed h-0 w-0"
+                style={{ left: menu.x, top: menu.y }}
+              />
+            </DropdownMenu.Trigger>,
+            document.body,
+          )}
           <MenuContent entries={menuEntries(menu.time)} side="top" align="start" />
         </DropdownMenu.Root>
       )}

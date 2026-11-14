@@ -227,6 +227,7 @@ impl CueIndex {
         let (service, key, id) = (self.clone(), track.media_key.clone(), track.track_id);
         let source = PathBuf::from(&track.source);
         let spawned = std::thread::Builder::new().name("cues".into()).spawn(move || {
+            crate::media::wait_for_first_frame();
             let started = Instant::now();
             let result = mkv::extract_file(&source, index, &cancel);
             service.lock().jobs.remove(&id);

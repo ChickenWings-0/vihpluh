@@ -149,6 +149,21 @@ describe("deriveAccent", () => {
     );
   });
 
+  it("keeps accent fills visible on the surface without moving accents that already show", () => {
+    for (const hex of ["#FFFFF0", "#FFF4B8", "#FFFFFF", "#05051A", "#000000"]) {
+      for (const theme of ["dark", "light"] as const) {
+        const fill = rgb(deriveAccent(hex, theme)["--accent"]);
+        const surface = theme === "dark" ? DARK_SURFACE : WHITE;
+        expect(contrast(fill, surface), `${hex} fill on ${theme}`).toBeGreaterThanOrEqual(2);
+      }
+    }
+    for (const s of ACCENT_SWATCHES) {
+      expect(deriveAccent(s.hex, "light")["--accent"], `${s.name} light`).toBe(s.hex);
+      expect(deriveAccent(s.hex, "dark")["--accent"], `${s.name} dark`).toBe(s.hex);
+    }
+    expect(deriveAccent("#05051A", "light")["--accent"]).toBe("#05051A");
+  });
+
   it("puts white on dark accents and near-black on light ones", () => {
     expect(deriveAccent("#05051A", "dark")["--on-accent"]).toBe("#FFFFFF");
     expect(deriveAccent("#FFF4B8", "dark")["--on-accent"]).toBe("#0D0D0F");

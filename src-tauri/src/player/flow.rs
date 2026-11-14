@@ -3,6 +3,7 @@
 //! and restores remembered tracks and delays; the end of a file asks the queue what is next;
 //! positions and the session are saved as playback goes.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -56,6 +57,8 @@ pub(super) struct Prepared {
     sub_links: Vec<SubLink>,
     /// HTTP headers a stream list gave for this URL: `(user_agent, referrer)`.
     headers: Option<(Option<String>, Option<String>)>,
+    /// The name a stream list gives this URL.
+    channel: Option<String>,
 }
 
 /// What the core remembers about the file that is loaded.
@@ -75,7 +78,7 @@ pub(super) struct Current {
 /// Queue operations from IPC (ARCHITECTURE §7.3 "queue").
 #[derive(Debug)]
 pub enum QueueOp {
-    Add { sources: Vec<String>, at: Option<usize> },
+    Add { sources: Vec<String>, at: Option<usize>, titles: HashMap<String, String> },
     Remove(Vec<String>),
     Move { ids: Vec<String>, to_index: usize },
     Clear { keep_current: bool },
@@ -104,7 +107,7 @@ impl Core {
             no_resume: request.no_resume.unwrap_or(false),
             preset: request.preset_id.clone(),
         };
-        let users = || request.sources.iter().map(NewItem::user).collect::<Vec<_>>();
+        let users = || NewItem::users(&request.sources, &request.titles);
         let decision = match request.mode {
             OpenMode::Replace => {
                 // Opening exactly one local file lines up its folder (§8.1).
@@ -126,8 +129,8 @@ impl Core {
     pub(super) fn queue_op(&mut self, op: QueueOp) {
         let position = self.mirror.time.pos;
         let decision = match op {
-            QueueOp::Add { sources, at } => {
-                self.queue.add(sources.into_iter().map(NewItem::user).collect(), at).1
+            QueueOp::Add { sources, at, titles } => {
+                self.queue.add(NewItem::users(&sources, &titles), at).1
             }
             QueueOp::Remove(ids) => {
                 self.queue.remove(&ids);
@@ -272,14 +275,21 @@ impl Core {
                 _ => Vec::new(),
             };
             // A channel from a stream list plays with the headers its list named (§8.3).
-            let headers = match (&links_db, is_url) {
+            // …and under the name its list gives it.
+            let (headers, channel) = match (&links_db, is_url) {
                 (Some(db), true) => {
                     let url = source.clone();
-                    db.call(move |c| crate::library::iptv::headers_for(c, &url)).ok().flatten()
+                    db.call(move |c| {
+                        let headers = crate::library::iptv::headers_for(c, &url)?;
+                        let name = crate::library::iptv::names_for(c, std::slice::from_ref(&url))?
+                            .remove(&url);
+                        Ok((headers, name))
+                    })
+                    .unwrap_or_default()
                 }
-                _ => None,
+                _ => (None, None),
             };
-            let prepared = Prepared { generation, media_key, history, sub_links, headers };
+            let prepared = Prepared { generation, media_key, history, sub_links, headers, channel };
             let _ = tx.send(CoreMsg::Prepared(Box::new(prepared)));
         });
         if let Err(err) = spawned {
@@ -290,6 +300,7 @@ impl Core {
                 history: None,
                 sub_links: Vec::new(),
                 headers: None,
+                channel: None,
             }));
         }
     }
@@ -339,6 +350,10 @@ impl Core {
             if let Some(referrer) = referrer {
                 options.push(("referrer", referrer.clone()));
             }
+        }
+        if let Some(name) = &prepared.channel {
+            // The top bar, the queue, and the OS media controls name the channel, not its URL.
+            options.push(("force-media-title", name.clone()));
         }
         if adopt {
             // mpv is already playing it.

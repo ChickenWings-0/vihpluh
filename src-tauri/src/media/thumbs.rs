@@ -194,6 +194,7 @@ impl Worker {
         if let Ok(bytes) = std::fs::read(&path) {
             return Some(bytes);
         }
+        super::wait_for_first_frame();
         let started = Instant::now();
         let reopen = self
             .open

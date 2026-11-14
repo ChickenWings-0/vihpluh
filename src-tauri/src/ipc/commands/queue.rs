@@ -21,7 +21,8 @@ pub fn queue_add(
     if sources.is_empty() {
         return Err(AppError::not_found("nothing playable there"));
     }
-    state.player.queue(QueueOp::Add { sources, at });
+    let titles = super::streams::channel_titles(&state, &sources);
+    state.player.queue(QueueOp::Add { sources, at, titles });
     Ok(())
 }
 

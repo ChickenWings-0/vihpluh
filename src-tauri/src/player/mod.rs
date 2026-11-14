@@ -603,7 +603,23 @@ impl Player {
             return Err(MpvError::Api { code: -1, message: "nothing is playing".into() });
         }
         let mode = if subtitles { "subtitles" } else { "video" };
-        let result = mpv.command_ret(&["screenshot", mode])?;
+        let result = match mpv.command_ret(&["screenshot", mode]) {
+            Ok(result) => result,
+            Err(first) => {
+                // mpv refuses to overwrite, and a template without `%n` names two shots of
+                // the same moment (a paused frame, or within one second) identically. Retry
+                // once with a sequence number added, then put the user's template back.
+                // https://mpv.io/manual/stable/#options-screenshot-template
+                let template = mpv.get_string("screenshot-template").unwrap_or_default();
+                if has_sequence(&template) {
+                    return Err(first);
+                }
+                mpv.set_string("screenshot-template", &format!("{template}-%n"))?;
+                let retried = mpv.command_ret(&["screenshot", mode]);
+                mpv.set_string("screenshot-template", &template)?;
+                retried?
+            }
+        };
         Ok(result.str_field("filename").unwrap_or_default().to_string())
     }
 
@@ -667,6 +683,17 @@ fn seek_flags(kind: SeekKind, exact: bool) -> &'static str {
         (SeekKind::Percent, true) => "absolute-percent+exact",
         (SeekKind::Percent, false) => "absolute-percent+keyframes",
     }
+}
+
+/// Whether an mpv screenshot template contains the `%n` sequence number (`%%` is a literal `%`).
+fn has_sequence(template: &str) -> bool {
+    let mut chars = template.chars();
+    while let Some(c) = chars.next() {
+        if c == '%' && chars.next() == Some('n') {
+            return true;
+        }
+    }
+    false
 }
 
 /// `general.screenshot_dir`, or the default folder when it is empty.
@@ -873,22 +900,31 @@ impl Core {
 
     fn on_mpv_event(&mut self, event: &Event) {
         match event {
-            Event::Shutdown => tracing::info!("mpv shut down"),
+            Event::Shutdown => {
+                tracing::info!("mpv shut down");
+                crate::media::FIRST_FRAME.shown();
+            }
             Event::AsyncError { id, error } => {
                 tracing::warn!(id, "an mpv command or property write failed: {error}");
             }
             Event::EndFile { reason, error } => {
                 tracing::debug!(?reason, ?error, "end of file");
+                // A load that failed or was replaced never shows its frame.
+                crate::media::FIRST_FRAME.shown();
                 if *reason == mpv::EndReason::Eof {
                     self.gapless_file_ended();
                 }
             }
             Event::FileLoaded => tracing::debug!("file loaded"),
             Event::StartFile => {
+                crate::media::FIRST_FRAME.opening();
                 self.on_start_file();
                 self.gapless_file_started();
             }
-            Event::PlaybackRestart => tracing::debug!("playback restart (first frame shown)"),
+            Event::PlaybackRestart => {
+                tracing::debug!("playback restart (first frame shown)");
+                crate::media::FIRST_FRAME.shown();
+            }
             _ => {}
         }
         let before_hwdec = self.mirror.state.hwdec.clone();
@@ -1112,6 +1148,14 @@ mod tests {
         assert_eq!(seek_flags(SeekKind::Absolute, true), "absolute+exact");
         assert_eq!(seek_flags(SeekKind::Relative, false), "relative+keyframes");
         assert_eq!(seek_flags(SeekKind::Percent, true), "absolute-percent+exact");
+    }
+
+    #[test]
+    fn screenshot_templates_with_a_sequence_number_are_recognised() {
+        assert!(!has_sequence("%F-%wH.%wM.%wS"));
+        assert!(has_sequence("%F-%n"));
+        assert!(!has_sequence("100%%n"));
+        assert!(has_sequence("%%%n"));
     }
 
     #[test]

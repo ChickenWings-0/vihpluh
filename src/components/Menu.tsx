@@ -36,8 +36,11 @@ export const action = (actionId: string, label?: string): MenuEntry => ({
 
 const ITEM =
   "flex h-7 cursor-default select-none items-center gap-2 rounded-control px-2 text-base text-fg outline-none data-[disabled]:text-fg-off data-[highlighted]:bg-hover";
+// Never taller than the room Radix measured on the side it chose (a short window), so the
+// menu scrolls instead of running past the window's edge.
 const SURFACE =
-  "z-(--z-floating) min-w-56 rounded-surface border border-line-strong bg-raised p-1 shadow-float";
+  "z-(--z-floating) min-w-56 overflow-y-auto rounded-surface border border-line-strong bg-raised p-1 shadow-float";
+const FITS = "max-h-(--radix-dropdown-menu-content-available-height)";
 
 function Row({
   icon: Icon,
@@ -136,7 +139,11 @@ function Entries({ entries }: { entries: MenuEntry[] }) {
                   />
                 </M.SubTrigger>
                 <M.Portal>
-                  <M.SubContent className={`${SURFACE} max-h-96 overflow-y-auto`} sideOffset={2}>
+                  <M.SubContent
+                    className={`${SURFACE} max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))]`}
+                    sideOffset={2}
+                    collisionPadding={8}
+                  >
                     <Entries entries={entry.entries} />
                   </M.SubContent>
                 </M.Portal>
@@ -164,7 +171,7 @@ export function MenuContent({
   return (
     <M.Portal>
       <M.Content
-        className={SURFACE}
+        className={`${SURFACE} ${FITS}`}
         align={align}
         side={side}
         sideOffset={4}

@@ -322,6 +322,23 @@ pub fn headers_for(
     .optional()
 }
 
+/// The names stream lists give these URLs, for those that are listed channels.
+pub fn names_for(
+    conn: &Connection,
+    urls: &[String],
+) -> rusqlite::Result<std::collections::HashMap<String, String>> {
+    let mut names = std::collections::HashMap::new();
+    let mut stmt = conn.prepare_cached(
+        "SELECT name FROM streams WHERE url = ?1 AND name <> '' ORDER BY id LIMIT 1",
+    )?;
+    for url in urls {
+        if let Some(name) = stmt.query_row(params![url], |row| row.get(0)).optional()? {
+            names.insert(url.clone(), name);
+        }
+    }
+    Ok(names)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -429,6 +446,10 @@ rtmp://example.com/live/stream\n";
                 ))
             );
             assert_eq!(headers_for(c, "https://example.com/sport.ts")?, None);
+            let urls = ["https://example.com/sport.ts".to_string(), "http://elsewhere/".into()];
+            let names = names_for(c, &urls)?;
+            assert_eq!(names.get(&urls[0]).map(String::as_str), Some("Sport, Live & More"));
+            assert_eq!(names.len(), 1, "an address no list names has no name");
 
             // A refresh replaces the entries.
             replace_channels(c, id, &parse("#EXTINF:-1,Only\nhttp://x/only\n"))?;

@@ -257,6 +257,11 @@ impl Run {
     }
 
     fn run(self) {
+        super::wait_for_first_frame();
+        if self.cancel.load(Ordering::Acquire) {
+            self.done.store(true, Ordering::Release);
+            return;
+        }
         let started = Instant::now();
         let status = match self.decode() {
             Ok(peaks) => {

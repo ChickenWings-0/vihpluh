@@ -414,9 +414,12 @@ reading embedded subtitles took 2.4 s for a 43 MB file because every seek refill
 (200 ms now); `sub-margin-y` is an integer to mpv and rejected a double; a video with only
 ambiguous candidates was also listed as "no subtitle found"; "subtitles off" was remembered for
 files that had no subtitle track, which kept a newly linked file from showing (D34). mpv reports
-`sub-start` / `sub-end` in the file's own time, before `sub-delay`. Noticed, not changed: a second
-screenshot within the same second fails, because the default name template has one-second
-resolution.
+`sub-start` / `sub-end` in the file's own time, before `sub-delay`. A second screenshot within the
+same second failed, because the default name template has one-second resolution (of the playback
+position, so two shots of a paused frame collided too). *Fixed in the polish pass (2026-11-15):
+when mpv refuses a name that exists and the template has no `%n`, the shot is retried once with
+`-%n` added and the template put back — three shots of one paused frame saved as `…00.00.00.png`,
+`…-0001.png`, `…-0002.png`.*
 
 ---
 
@@ -497,7 +500,11 @@ Found and fixed: the glob matcher let `**/` match inside a name, so the shipped 
 pattern skipped every file with an extension; video durations were never filled in, because the
 probe disabled every track and mpv then refuses to load; a reused probe handle read the previous
 file's end as the next file's failure; after opening a row with Enter nothing was selected.
-Noticed, not changed: a channel's title in the queue is its address, not the name its list gives.
+A channel's title in the queue was its address, not the name its list gives. *Fixed in the polish
+pass (2026-11-15): `queue_add` and `player_open` look up the list's names for the URLs they get, so
+a queued channel is named before it plays, and the load passes the name as `force-media-title`, so
+the top bar and the OS media controls show it too. Checked against a local list: "Test Channel
+One" in the queue before and after playing, and as the media title.*
 
 ---
 
@@ -541,9 +548,16 @@ Found and fixed: the documented contrast of dark text on the default orange was 
 6.8:1; a pale accent on the light theme (or a dark one on the dark theme) left the focus ring
 invisible; `keybinds_remove_custom` could have deleted the wrong entry when the file also held an
 invalid one, so custom bindings now carry their position in the file.
-Noticed, not changed: a pale accent on the light theme also makes accent *fills* (toggle tracks,
-slider fills) faint — only text and the focus ring are guarded; the right-click menu can run past
-the bottom edge of a short window. While testing, the palette's "Mute" entry was run once, which
+A pale accent on the light theme also made accent *fills* (toggle tracks, slider fills) faint —
+only text and the focus ring were guarded; the right-click menu could run past the bottom edge of a
+short window. *Both fixed in the polish pass (2026-11-15):* an accent under 2:1 against the surface
+is moved just far enough to reach it before the other tokens derive from it (`#FFFFF0` on light →
+`#B7B7A9`, 2.03:1; `#05051A` on dark → `#454965`, 2.06:1; the swatches are untouched — D45), and
+menus are capped at the height Radix measures on the side it opens to and scroll. In a 260 px
+viewport the context menu stayed inside opened at 60 and 130 px, and so did the seek bar's menu at
+240 px. That one had opened below the window: its `fixed` anchor sat inside the translated bottom
+bar, so it was offset by the bar's own position (448 px for a click at 240); the anchor now lives
+on `<body>`. While testing, the palette's "Mute" entry was run once, which
 unmuted the muted test run for about half a second.
 
 ---
@@ -603,6 +617,11 @@ The three misses:
   coming up. Phase 1 measured 615–913 ms on an idle machine with a debug build, so load is part of
   it, but the thumbnail handle, cue reader, and waveform reader now start at the same moment and
   may be part of it too. To be measured again on an idle machine before changing anything.
+  *Polish pass (2026-11-15):* those three now wait for the primary player's first frame (at most
+  3 s) before their heavy part (D46). In the running app the gate never had to hold: the waveform
+  cannot be asked for before the duration is known, and the first frame followed `file-loaded` by
+  0.1–0.4 s, sooner than any request arrived; holding and releasing are covered by a unit test.
+  First frame was **not** re-measured — the machine was in use — so this row stays ✗.
 - **Memory.** The webview's share alone is close to the whole budget. Nothing in vihpluh's own
   process stands out once the caches are subtracted (about 290 MB).
 - **Network.** The switches now passed to WebView2 (`additionalBrowserArgs`: no background
@@ -649,8 +668,9 @@ machine without publishing, installing, or pushing is done; the rest waits for t
 pushing (which is what runs CI), a clean Windows VM, the Fedora machine, the design-credit
 licence, and the tag. Local build with the GNU toolchain: `pnpm tauri build` took about 14 minutes
 and downloaded NSIS from the Tauri project's releases on first use.
-Noticed, not changed: a second screenshot of the same file in the same second fails, because the
-default file name template has no counter (first noted in Phase 9).
+A second screenshot of the same file in the same second failed, because the default file name
+template has no counter (first noted in Phase 7). *Fixed in the polish pass (2026-11-15) — see the
+Phase 7 notes.*
 
 ---
 
@@ -660,19 +680,19 @@ Fill in as phases close (✓ works · ◐ works with documented limitation · �
 
 | Capability | Windows | Fedora Wayland | Fedora X11 |
 |---|---|---|---|
-| Hardware decode HEVC 4K (zero-copy where A§5.4 says so) | | | ◐ expected: copy-back on AMD/Intel |
-| Hardware decode AV1 | | | |
-| HDR passthrough | | — tone-mapped | — tone-mapped |
-| Transparent UI over video, no flicker | | | |
-| Auto-hide chrome / Zen | | | |
-| Custom title bar + resize | | | |
+| Hardware decode HEVC 4K (zero-copy where A§5.4 says so) | ✓ `d3d11va`, T4 5 min 0 dropped (Phase 11) | | ◐ expected: copy-back on AMD/Intel |
+| Hardware decode AV1 | ✓ `d3d11va`, 0 dropped; software fallback logged (Phase 1) | | |
+| HDR passthrough | not verified — no HDR display | — tone-mapped | — tone-mapped |
+| Transparent UI over video, no flicker | ✓ (S1; fullscreen and the dock in Phases 3–4) | | |
+| Auto-hide chrome / Zen | ✓ (Phase 3) | | |
+| Custom title bar + resize | ◐ window controls ✓; moving and resizing by mouse not checked; no Snap Layouts on the custom button (D44) | | |
 | Native decorations option | ✓ | ◐ expected: CSD on GNOME | |
-| Fullscreen | | | |
+| Fullscreen | ✓ single display (Phase 3); other monitors not checked | | |
 | PiP positioning + always-on-top | ✓ | ◐ expected: compositor-controlled | |
-| Media keys / OS media controls | | | |
-| Sleep inhibit | | | |
-| Seek thumbnails | | | |
-| Waveform | | | |
+| Media keys / OS media controls | ✓ SMTC title and status; toggled through the session, no physical key (Phase 2) | | |
+| Sleep inhibit | ◐ requested while video plays and released on pause (log); the system-wide effect not isolated (Phase 2) | | |
+| Seek thumbnails | ✓ p95 120 ms uncached, 1.5 ms cached (Phase 11) | | |
+| Waveform | ✓ 3 h in 9.1 s, 0 dropped (Phase 6) | | |
 | Subtitle timeline + auto-match | ✓ | | |
 | Presets | ✓ | | |
 | Library + watch folders | ✓ | | |

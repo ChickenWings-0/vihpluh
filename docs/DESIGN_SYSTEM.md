@@ -83,6 +83,7 @@ exception: it keeps the hand-tuned values of §2.1 and §2.2, so the shipped loo
 
 | Token | Derivation (OKLCH) |
 |---|---|
+| `--accent` | the chosen colour; if it has under 2:1 against `--bg-surface` (a very pale accent on the light theme, a very dark one on the dark theme), its lightness is moved just far enough to reach 2:1, so fills (slider fills, toggle tracks, the played seek bar) stay visible. Every token below derives from this value. |
 | `--accent-hover` | lightness + 0.06 |
 | `--accent-active` | lightness − 0.07 |
 | `--accent-muted` | accent at 16 % alpha (14 % light theme) |

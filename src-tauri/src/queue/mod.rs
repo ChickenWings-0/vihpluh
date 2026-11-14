@@ -6,6 +6,8 @@
 
 pub mod session;
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -74,11 +76,21 @@ pub struct NewItem {
     pub source: String,
     pub origin: Origin,
     pub origin_ref: Option<String>,
+    /// A name given elsewhere (a stream list's channel name); the file name or URL otherwise.
+    pub title: Option<String>,
 }
 
 impl NewItem {
     pub fn user(source: impl Into<String>) -> Self {
-        Self { source: source.into(), origin: Origin::User, origin_ref: None }
+        Self { source: source.into(), origin: Origin::User, origin_ref: None, title: None }
+    }
+
+    /// Items the user added, named from `titles` (source → name) where it has a name.
+    pub fn users(sources: &[String], titles: &HashMap<String, String>) -> Vec<Self> {
+        sources
+            .iter()
+            .map(|s| Self { title: titles.get(s).cloned(), ..Self::user(s.as_str()) })
+            .collect()
     }
 }
 
@@ -256,7 +268,7 @@ impl Queue {
         QueueItem {
             id: self.rng.uuid(),
             is_url: crate::cli::is_url(&new.source),
-            title: title_for(&new.source),
+            title: new.title.unwrap_or_else(|| title_for(&new.source)),
             source: new.source,
             duration: None,
             media_key: None,
@@ -629,6 +641,7 @@ pub fn folder_fill(file: &str) -> Option<(Vec<NewItem>, usize)> {
             source: p.display().to_string(),
             origin: Origin::Folder,
             origin_ref: Some(folder.clone()),
+            title: None,
         })
         .collect();
     Some((items, index))
@@ -932,6 +945,16 @@ mod tests {
     }
 
     #[test]
+    fn listed_channels_are_named_from_the_start() {
+        let mut q = Queue::new(1);
+        let sources = ["http://tv/1.m3u8".to_string(), "http://tv/2.m3u8".to_string()];
+        let titles = HashMap::from([(sources[0].clone(), "News One".to_string())]);
+        q.add(NewItem::users(&sources, &titles), None);
+        assert_eq!(q.items()[0].title, "News One");
+        assert_eq!(q.items()[1].title, "http://tv/2.m3u8", "an unlisted URL shows itself");
+    }
+
+    #[test]
     fn manual_edits_turn_folder_items_into_user_items() {
         let mut q = Queue::new(1);
         q.replace(
@@ -940,11 +963,13 @@ mod tests {
                     source: "E1".into(),
                     origin: Origin::Folder,
                     origin_ref: Some("D:/S".into()),
+                    title: None,
                 },
                 NewItem {
                     source: "E2".into(),
                     origin: Origin::Folder,
                     origin_ref: Some("D:/S".into()),
+                    title: None,
                 },
             ],
             0,
