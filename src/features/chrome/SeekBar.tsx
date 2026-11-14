@@ -34,6 +34,7 @@ import { useBookmarkStore } from "@/stores/bookmarks";
 import { useConfig } from "@/stores/config";
 import { reportError } from "@/stores/osd";
 import { usePlayer } from "@/stores/player";
+import { useThemeStore } from "@/stores/theme";
 import { getCacheEnd, getDuration, getPosition } from "@/stores/time";
 import { useUiStore } from "@/stores/ui";
 import { useWaveform } from "./useWaveform";
@@ -64,8 +65,8 @@ function WaveformTrack({
   const base = useRef<HTMLCanvasElement>(null);
   const played = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
-  const theme = useConfig((c) => c.interface.theme);
-  const accent = useConfig((c) => c.interface.accent);
+  const theme = useThemeStore((s) => s.resolved);
+  const accent = useThemeStore((s) => s.accent);
 
   useEffect(() => {
     const el = box.current;

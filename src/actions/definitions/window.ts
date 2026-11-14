@@ -1,5 +1,5 @@
 /** Window and interface actions (KEYBINDS_AND_CONFIG §2 "Window and interface"). */
-import { Expand, Minimize2, Pin, Scan, Shrink } from "lucide-react";
+import { Expand, Keyboard, Minimize2, Pin, Scan, Search, Settings, Shrink } from "lucide-react";
 import { windowMinimize, windowSetAlwaysOnTop, windowSetMode } from "@/ipc/commands";
 import { useOsdStore } from "@/stores/osd";
 import { useUiStore } from "@/stores/ui";
@@ -69,7 +69,7 @@ export const windowActions: Action[] = [
   },
   {
     // The first applicable step runs, then stops (§2 "ui.escape chain"). Menus and popovers
-    // close themselves on Escape before this runs; overlays join the chain in later phases.
+    // close themselves on Escape before this runs.
     // It never closes the dock and never pauses.
     id: "ui.escape",
     label: "Back out",
@@ -82,6 +82,13 @@ export const windowActions: Action[] = [
       }
       if (state.prompt) {
         state.ask(null);
+        return undefined;
+      }
+      // Settings, the shortcuts sheet, and the palette close as a whole, like a popover:
+      // backing out of one never takes two presses.
+      if (state.overlay) {
+        state.setOverlay(null);
+        focusPlayerRoot();
         return undefined;
       }
       const active = document.activeElement;
@@ -103,6 +110,57 @@ export const windowActions: Action[] = [
         return undefined;
       }
       if (state.window.mode === "fullscreen") return setFullscreen(false);
+      return undefined;
+    },
+  },
+  {
+    id: "ui.open_settings",
+    label: "Settings",
+    group: "window",
+    icon: Settings,
+    isOn: () => ui().overlay === "settings",
+    run: () => {
+      if (ui().overlay === "settings") {
+        ui().setOverlay(null);
+        focusPlayerRoot();
+      } else {
+        ui().openSettings();
+      }
+      return undefined;
+    },
+  },
+  {
+    id: "ui.show_shortcuts",
+    label: "Keyboard shortcuts",
+    group: "window",
+    icon: Keyboard,
+    isOn: () => ui().overlay === "shortcuts",
+    run: () => {
+      const open = ui().overlay === "shortcuts";
+      ui().setOverlay(open ? null : "shortcuts");
+      if (open) focusPlayerRoot();
+      return undefined;
+    },
+  },
+  {
+    id: "ui.command_palette",
+    label: "Command palette",
+    group: "window",
+    icon: Search,
+    run: () => {
+      const open = ui().overlay === "palette";
+      ui().setOverlay(open ? null : "palette");
+      if (open) focusPlayerRoot();
+      return undefined;
+    },
+  },
+  {
+    id: "settings.focus_search",
+    label: "Search settings",
+    group: "context",
+    isEnabled: () => ui().overlay === "settings",
+    run: () => {
+      ui().requestSettingsSearch();
       return undefined;
     },
   },

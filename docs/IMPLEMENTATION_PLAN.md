@@ -203,7 +203,7 @@ parallel with WebView2 start-up (D18). To revisit with a release build in the Ph
 - [ ] Media keys play/pause from another focused app; the OS media overlay shows the title (W: SMTC; L: MPRIS via `playerctl status`). *(**W** ✓: the session lists the title and live status; a toggle sent through the Windows session (the path media keys take) paused and resumed playback while the window was in the background. No physical key was pressed.)*
 - [ ] Display does not sleep during playback; does sleep when paused (both OSes). *(**W**, partial: the app requests Display while video plays and releases on pause/stop (debug log). The system-wide state could not isolate it — another program held the display awake throughout — and `powercfg /requests` needs admin.)*
 - [x] T12 (corrupt) → error state, no crash, no hang. Launching a second instance with a file hands off and exits. *(Empty and truncated files → `error` + toast, recovery on the next open; the second instance exited in 177 ms without starting mpv and the first played its file, relative path resolved.)*
-- [x] Unit tests: state machine transitions, hwdec table, config overlay/migration, path resolution. *(Migration has nothing to migrate yet: schema 1; the scaffold is a Phase 10 task.)*
+- [x] Unit tests: state machine transitions, hwdec table, config overlay/migration, path resolution. *(Migration has nothing to migrate yet: schema 1; the scaffold and its tests arrived in Phase 10.)*
 
 **Platforms:** W + L-Wayland (X11 smoke test only).
 
@@ -433,7 +433,7 @@ resolution.
 - [x] Full layered load pipeline (A§6.5 step 2 & 4): defaults → presets → per-file memory → CLI; `appliedPresets`, `presetDirty` computation. *(`player/presets.rs`.)*
 - [x] `preset_capture_current` (diff vs defaults, track → rule conversion, default match suggestion). *(The suggestion is made by the Save-as form from `media.series`.)*
 - [x] **Preset strip** (D§10.6): applied preset + modified dot, Update, Save as… popover (name, applies-to, sections), ⋯ menu.
-- [x] Presets manager sub-page data plumbing (UI shell lands with Settings in Phase 10; for now "Reveal preset file"). *(`preset_list/get/save/delete/matches_for`, `presets://changed`; "Manage presets…" is shown disabled until then. Reveal opens the file manager, so it was not exercised.)*
+- [x] Presets manager sub-page data plumbing (UI shell lands with Settings in Phase 10; for now "Reveal preset file"). *(`preset_list/get/save/delete/matches_for`, `presets://changed`; "Manage presets…" was disabled until Phase 10 and now opens that page. Reveal opens the file manager, so it was not exercised.)*
 - [x] `--preset <ID>` CLI flag; `presets.*` actions.
 
 ### Verification
@@ -501,35 +501,50 @@ Noticed, not changed: a channel's title in the queue is its address, not the nam
 
 ---
 
-## 12. Phase 10 — Settings, hotkey editor, theming — ☐ not started
+## 12. Phase 10 — Settings, hotkey editor, theming — ☑ closed (Windows, 2026-11-14) — Linux pending
 
 **Goal:** every setting and shortcut editable in-app, searchable, in plain English; light theme and accent picker.
 
-- [ ] `src/features/settings/schema.ts` covering K§5.1–5.10; schema-parity test against the Rust `Config` (K§6 rule 1).
-- [ ] **Settings overlay** (D§11.2): rail with duotone category icons, pages generated from the schema, control-by-type mapping (K§6 rule 4), modified dot + per-row reset, "Reset this page", restart chips, platform gating.
-- [ ] Settings search across label/tooltip/keywords/key with highlighting.
-- [ ] Library page (folders list management), Performance page (cache size + clear), Playback → **Presets manager** sub-page.
-- [ ] **Hotkey editor** (K§4): grouped rows, capture mode, conflict resolution bar, per-row and global reset, find-by-key, keymap base select, custom-binding rows (view + delete; creation stays file-based), immediate persistence via `keybinds_set`.
-- [ ] `resources/keymaps/vlc.toml` and `mpv.toml` (K§2 "alternative keymaps").
-- [ ] Shortcuts sheet (`F1`); command palette (`Ctrl+Shift+P`) listing all enabled actions with fuzzy search.
-- [ ] Theming: light theme tokens (D§2.2), `system` following, **accent picker** with swatches + free input, OKLCH derivation + contrast guard (`src/lib/color.ts`, unit-tested), live redraw of canvases.
-- [ ] `interface.ui_scale`, `reduce_motion`, tooltip-shortcut toggle, OSD position/duration.
-- [ ] Config migration scaffold (`config/migrate.rs`) with a no-op v1 and a test proving `.bak` creation.
+- [x] `src/features/settings/schema.ts` covering K§5.1–5.10; schema-parity test against the Rust `Config` (K§6 rule 1). *(118 keys. The schema is typed against the generated `Config`, so a missing or extra key does not compile; the test also checks every default against `default.toml` and every label, tooltip, and restart mark against the tables of K§5. Tooltips that K§5 left empty were written and added there.)*
+- [x] **Settings overlay** (D§11.2): rail with duotone category icons, pages generated from the schema, control-by-type mapping (K§6 rule 4), modified dot + per-row reset, "Reset this page", restart chips, platform gating. *(`features/settings/SettingsOverlay.tsx`, `controls.tsx`. Open-ended step sizes get an exact field without a slider. A new `config_defaults` command says what "default" is.)*
+- [x] Settings search across label/tooltip/keywords/key with highlighting. *(`features/settings/search.ts`; results are grouped by category and the rail shows a count per category.)*
+- [x] Library page (folders list management), Performance page (cache size + clear), Playback → **Presets manager** sub-page. *(`extras.tsx`, `PresetsManager.tsx`; "Manage presets…" in the preset strip opens the sub-page.)*
+- [x] **Hotkey editor** (K§4): grouped rows, capture mode, conflict resolution bar, per-row and global reset, find-by-key, keymap base select, custom-binding rows (view + delete; creation stays file-based), immediate persistence via `keybinds_set`. *(`HotkeyEditor.tsx` over the pure model in `hotkeys.ts`. Rows come from the action registry, so the empty base keymap still lists every action. Mouse buttons and the wheel are captured over the "Press a key…" box only.)*
+- [x] `resources/keymaps/vlc.toml` and `mpv.toml` (K§2 "alternative keymaps").
+- [x] Shortcuts sheet (`F1`); command palette (`Ctrl+Shift+P`) listing all enabled actions with fuzzy search. *(`features/overlays/`; `lib/fuzzy.ts`. The palette leaves out panel-scoped actions and those that need arguments.)*
+- [x] Theming: light theme tokens (D§2.2), `system` following, **accent picker** with swatches + free input, OKLCH derivation + contrast guard (`src/lib/color.ts`, unit-tested), live redraw of canvases. *(`stores/theme.ts` applies them. The default orange keeps its hand-tuned tokens; a `--focus-ring` token joins the derived ones — D40.)*
+- [x] `interface.ui_scale`, `reduce_motion`, tooltip-shortcut toggle, OSD position/duration. *(Scale and reduced motion are applied by `stores/theme.ts`; the other three were already honoured and are now reachable in Settings.)*
+- [x] Config migration scaffold (`config/migrate.rs`) with a no-op v1 and a test proving `.bak` creation.
 
 ### Verification
 
-- [ ] Every key in K§5.1–5.10 is reachable in the UI, has a label and tooltip, and changing it takes effect live (or shows the restart chip). Spot-check ten across categories against their mpv effect.
-- [ ] Settings search: "subtitle size", "hdr", "wayland", and a pasted `performance.demuxer_cache_mb` each find the right row.
-- [ ] After a session of changes, `config.toml` contains only non-default keys and any pre-existing comments are intact.
-- [ ] Hotkey editor: rebind Play/Pause, bind a key already in use (conflict bar offers Replace), unbind, reset one, reset all, find-by-key — all persist to `keybinds.toml` and apply immediately to menus/tooltips.
-- [ ] Switching base keymap to `vlc` then `mpv` changes defaults while keeping user overrides.
-- [ ] Shortcut OSD badge shows the key actually pressed, including for a custom binding.
-- [ ] Light theme: every surface, popover, and canvas is legible; no dark-only hard-coded colour remains (visual pass over every panel).
-- [ ] Custom accent: pick a very light and a very dark colour — text on accent stays readable (contrast guard), focus ring visible.
-- [ ] Settings open over playing T4: no dropped frames; playback continues.
-- [ ] Schema-parity and colour unit tests green.
+- [x] Every key in K§5.1–5.10 is reachable in the UI, has a label and tooltip, and changing it takes effect live (or shows the restart chip). Spot-check ten across categories against their mpv effect. *(116 rows on Windows, each with its ⓘ — the two Linux-only keys are hidden here. Changed through the controls and read back from mpv: subtitle font size 42 → 56, styled-subtitle mode `scale` → `force`, bold, deband, maximum volume 130 → 150, stream buffer 30 → 45 s, read-ahead memory 512 → 256 MB, pitch correction off, screenshot format `jpg`. `controls.precise_seek` was written and marked, but it acts per seek, so there is no mpv property to read back.)*
+- [x] Settings search: "subtitle size", "hdr", "wayland", and a pasted `performance.demuxer_cache_mb` each find the right row. *("subtitle size" → font size, size multiplier, size step among 6; "hdr" → tone mapping, passthrough, peak brightness, graphics API; the pasted key → exactly its row. "wayland" finds the picture-in-picture corner row here: the XWayland and GPU-buffer rows it also matches are Linux-only and hidden on Windows.)*
+- [x] After a session of changes, `config.toml` contains only non-default keys and any pre-existing comments are intact. *(A file with a header comment, a comment line, and a trailing comment kept all three; resetting the Subtitles page removed its keys and the emptied table.)*
+- [x] Hotkey editor: rebind Play/Pause, bind a key already in use (conflict bar offers Replace), unbind, reset one, reset all, find-by-key — all persist to `keybinds.toml` and apply immediately to menus/tooltips. *(F7 added to Play/Pause and it paused at once; Space onto Stop raised "Space is used by Play / Pause" and changed nothing until Replace; Tab was refused with its reason; Esc cancelled a capture without closing Settings; a cap removed with ✕ and another re-captured in place; find-by-key showed the one row; reset one and reset all left `keybinds.toml` with only `schema = 1`. The shortcuts sheet showed the new keys.)*
+- [x] Switching base keymap to `vlc` then `mpv` changes defaults while keeping user overrides. *(Next went `N` → `Shift+.`/`Enter`, Stop → `S`; the edited Play/Pause keys stayed through both, and through `none`, which still listed all 120 rows.)*
+- [x] Shortcut OSD badge shows the key actually pressed, including for a custom binding. *(`F6` for the rebound Play/Pause; `Speed 1.75× [F9]` for a `[[custom]]` entry added to the file while running.)*
+- [x] Light theme: every surface, popover, and canvas is legible; no dark-only hard-coded colour remains (visual pass over every panel). *(Looked at Settings, both bars, the sidebar with the subtitle timeline, the queue, the Library drawer, the context menu, and the OSD in webview captures. The waveform canvases redrew in the light track colour. The idle screen and the equalizer were not looked at in light; neither has a colour of its own.)*
+- [x] Custom accent: pick a very light and a very dark colour — text on accent stays readable (contrast guard), focus ring visible. *(`#FFFFF0` and `#05051A` in both themes: accent text ≥ 4.5:1 on the surface, text on the accent 19–20:1 (it turns white on the dark one). The focus ring was 1.0–1.1:1 in two of the four cases at first; it now falls back to the readable shade — D40.)*
+- [x] Settings open over playing T4: no dropped frames; playback continues. *(Every page opened and scrolled end to end while T4 played at 60 fps: the drop counters did not move.)*
+- [x] Schema-parity and colour unit tests green.
 
 **Platforms:** W + L-Wayland + L-X11 (theme/decorations interplay).
+
+**Phase 10 notes (2026-11-14, Windows only).** Driven through the webview's DevTools channel in
+the quiet, muted test build. Not exercised, because each opens a system window: "Browse…" on the
+screenshot folder, "Add folder…" on the Library page, "Open config folder", and "Show the preset's
+file". `system` theme was seen following a dark OS only. Linux: the two Linux-only rows, native
+decorations with the light theme, and the keyboard-layout glyphs under WebKitGTK (which has no
+Keyboard Layout Map API, so US names are expected there) are untested.
+Found and fixed: the documented contrast of dark text on the default orange was 7.4:1, measured
+6.8:1; a pale accent on the light theme (or a dark one on the dark theme) left the focus ring
+invisible; `keybinds_remove_custom` could have deleted the wrong entry when the file also held an
+invalid one, so custom bindings now carry their position in the file.
+Noticed, not changed: a pale accent on the light theme also makes accent *fills* (toggle tracks,
+slider fills) faint — only text and the focus ring are guarded; the right-click menu can run past
+the bottom edge of a short window. While testing, the palette's "Mute" entry was run once, which
+unmuted the muted test run for about half a second.
 
 ---
 
@@ -612,7 +627,7 @@ Fill in as phases close (✓ works · ◐ works with documented limitation · �
 | Presets | ✓ | | |
 | Library + watch folders | ✓ | | |
 | IPTV / network streams | ✓ | | |
-| Settings + hotkey editor | | | |
+| Settings + hotkey editor | ✓ | | |
 | Installer / package | | | |
 
 **Release gate for v0.1.0:** all twelve phases closed · matrix has no ✗ · A§14 budgets met or consciously amended ·

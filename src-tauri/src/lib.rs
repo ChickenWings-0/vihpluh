@@ -322,6 +322,7 @@ macro_rules! commands {
             ipc::commands::config::config_get,
             ipc::commands::config::config_set,
             ipc::commands::config::config_reset,
+            ipc::commands::config::config_defaults,
             ipc::commands::keybinds::keybinds_get,
             ipc::commands::keybinds::keybinds_set,
             ipc::commands::keybinds::keybinds_reset,

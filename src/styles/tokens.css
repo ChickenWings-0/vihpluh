@@ -24,6 +24,7 @@
   --accent-muted: rgb(255 107 0 / 0.16);
   --accent-text: #ff7a1a;
   --on-accent: #0d0d0f;
+  --focus-ring: var(--accent);
   --track: #3a3a45;
   --track-buffer: #5a5a66;
   --danger: #f0464a;
@@ -99,6 +100,7 @@
   --text-disabled: #b4b4be;
   --accent-muted: rgb(255 107 0 / 0.14);
   --accent-text: #c24e00;
+  --focus-ring: var(--accent-text);
   --track: #d0d0d9;
   --track-buffer: #a9a9b5;
   --icon-duo-base: #85858f;

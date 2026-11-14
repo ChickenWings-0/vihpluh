@@ -5,6 +5,7 @@
 import { dispatch } from "@/actions/registry";
 import {
   appInfo,
+  configDefaults,
   configGet,
   keybindsGet,
   playerSnapshot,
@@ -22,6 +23,7 @@ import {
   onQueueChanged,
   onWindowState,
 } from "@/ipc/events";
+import { loadKeyboardLayout } from "@/keybinds/layout";
 import { useAppStore } from "./app";
 import { startBookmarkSync } from "./bookmarks";
 import { useConfigStore } from "./config";
@@ -30,6 +32,7 @@ import { reportError, useOsdStore } from "./osd";
 import { usePlayerStore } from "./player";
 import { startPresetSync } from "./presets";
 import { useQueueStore } from "./queue";
+import { startTheme } from "./theme";
 import { receiveTime, resetTime, setClock } from "./time";
 import { setUiPersister, useUiStore } from "./ui";
 
@@ -100,7 +103,9 @@ export function startSync(): () => void {
 
   const stopBookmarks = startBookmarkSync();
   const stopPresets = startPresetSync();
+  const stopTheme = startTheme();
   setUiPersister((patch) => void sessionUiSet(patch).catch(reportError));
+  loadKeyboardLayout();
   refetch();
   queueSnapshot()
     .then((queue) => useQueueStore.getState().setQueue(queue))
@@ -110,6 +115,9 @@ export function startSync(): () => void {
     .catch(reportError);
   configGet()
     .then((config) => useConfigStore.getState().setConfig(config))
+    .catch(reportError);
+  configDefaults()
+    .then((defaults) => useConfigStore.getState().setDefaults(defaults))
     .catch(reportError);
   keybindsGet()
     .then((keymap) => useKeymapStore.getState().setKeymap(keymap))
@@ -126,5 +134,6 @@ export function startSync(): () => void {
     unsubscribeClock();
     stopBookmarks();
     stopPresets();
+    stopTheme();
   };
 }

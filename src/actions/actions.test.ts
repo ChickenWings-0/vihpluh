@@ -3,22 +3,9 @@ import keymapText from "../../src-tauri/resources/keymaps/vihpluh.toml?raw";
 import { cleanPastedSource } from "./definitions/app";
 import { nextTrackId } from "./definitions/tracks";
 import { allActions, getAction, isEnabled, registerActions } from "./index";
+import { PARAMETERISED } from "./parameterised";
 
 beforeAll(() => registerActions());
-
-const PARAMETERISED = [
-  "player.seek_relative",
-  "player.seek_absolute",
-  "player.set_speed",
-  "player.set_volume",
-  "audio.set_delay",
-  "subtitles.set_delay",
-  "audio.set_equalizer_preset",
-  "video.set_aspect",
-  "presets.apply",
-  "player.set_sleep_timer",
-  "mpv.command",
-];
 
 describe("action registry", () => {
   it("has every action the shipped keymap names, and nothing it doesn't", () => {
@@ -34,9 +21,18 @@ describe("action registry", () => {
   });
 
   it("disables placeholders", () => {
-    expect(getAction("ui.open_settings")?.comingIn).toBe("Phase 10");
-    expect(isEnabled("ui.open_settings")).toBe(false);
+    expect(getAction("window.toggle_pip")?.comingIn).toBe("Phase 11");
+    expect(isEnabled("window.toggle_pip")).toBe(false);
     expect(isEnabled("app.quit")).toBe(true);
+  });
+
+  it("scopes every panel action to the panel its id names", () => {
+    const contexts = ["queue", "library", "bookmarks", "settings"];
+    const scoped = allActions().filter((a) => a.group === "context");
+    expect(scoped.length).toBeGreaterThan(8);
+    for (const action of scoped) {
+      expect(contexts, action.id).toContain(action.id.slice(0, action.id.indexOf(".")));
+    }
   });
 
   it("gives every action a label", () => {

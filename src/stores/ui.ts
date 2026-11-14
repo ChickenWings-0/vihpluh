@@ -29,6 +29,12 @@ export interface TextPrompt {
   onSubmit: (text: string) => void | Promise<void>;
 }
 
+/** Full-window overlays above everything but toasts; one at a time (DESIGN_SYSTEM §11.2). */
+export type Overlay = "settings" | "shortcuts" | "palette" | null;
+
+/** A Settings page: one of the ten categories, or the Presets sub-page of Playback. */
+export type SettingsPage = string;
+
 /** Maps a drop point to a queue position when the pointer is over the queue panel. */
 export type DropResolver = (x: number, y: number) => number | null;
 
@@ -54,6 +60,12 @@ interface UiStore {
   /** The Library drawer (left side) is open. */
   library: boolean;
   prompt: TextPrompt | null;
+  overlay: Overlay;
+  settingsPage: SettingsPage;
+  /** Bumped to move focus to the Settings search field. */
+  settingsSearchRequest: number;
+  /** The hotkey editor is waiting for a key: shortcuts must not fire meanwhile. */
+  capturingKey: boolean;
   sidebarTab: SidebarTab;
   /** Bumped to scroll the Playback tab to the stream inspector. */
   inspectorRequest: number;
@@ -78,6 +90,12 @@ interface UiStore {
   setDock: (panel: DockPanel) => void;
   setLibrary: (open: boolean) => void;
   ask: (prompt: TextPrompt | null) => void;
+  setOverlay: (overlay: Overlay) => void;
+  /** Opens Settings, on `page` when given (else where it was left). */
+  openSettings: (page?: SettingsPage) => void;
+  setSettingsPage: (page: SettingsPage) => void;
+  requestSettingsSearch: () => void;
+  setCapturingKey: (capturing: boolean) => void;
   /** Opens the sidebar on `tab`; with `toggle`, closes it when that tab is already showing. */
   showSidebarTab: (tab: SidebarTab, toggle?: boolean) => void;
   requestInspector: () => void;
@@ -110,6 +128,10 @@ export const useUiStore = create<UiStore>((set, get) => ({
   dock: null,
   library: false,
   prompt: null,
+  overlay: null,
+  settingsPage: "general",
+  settingsSearchRequest: 0,
+  capturingKey: false,
   sidebarTab: "subtitles",
   inspectorRequest: 0,
   dockDragWidth: null,
@@ -150,6 +172,14 @@ export const useUiStore = create<UiStore>((set, get) => ({
     persistUi({ libraryOpen: library });
   },
   ask: (prompt) => set({ prompt }),
+  setOverlay: (overlay) => {
+    if (get().overlay !== overlay) set({ overlay, capturingKey: false });
+  },
+  openSettings: (page) =>
+    set({ overlay: "settings", settingsPage: page ?? get().settingsPage, capturingKey: false }),
+  setSettingsPage: (settingsPage) => set({ settingsPage }),
+  requestSettingsSearch: () => set({ settingsSearchRequest: get().settingsSearchRequest + 1 }),
+  setCapturingKey: (capturingKey) => set({ capturingKey }),
   showSidebarTab: (tab, toggle = false) => {
     const s = get();
     if (toggle && s.dock === "sidebar" && s.sidebarTab === tab) {

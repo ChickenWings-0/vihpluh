@@ -210,9 +210,7 @@ export function PresetStrip() {
     {
       kind: "item",
       label: "Manage presets…",
-      disabled: true,
-      hint: "in Settings",
-      onSelect: () => undefined,
+      onSelect: () => useUiStore.getState().openSettings("presets"),
     },
     {
       kind: "item",

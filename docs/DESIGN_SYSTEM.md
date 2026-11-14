@@ -51,7 +51,7 @@ Related: action IDs and shortcuts → [KEYBINDS_AND_CONFIG](KEYBINDS_AND_CONFIG.
 | `--accent-active` | `#E05E00` | Pressed accent surfaces. |
 | `--accent-muted` | `rgb(255 107 0 / 0.16)` | Selected-row tint, active tab background, badge fill. |
 | `--accent-text` | `#FF7A1A` | Accent-coloured text/icons on dark surfaces. |
-| `--on-accent` | `#0D0D0F` | Text/icons **on** an accent fill (dark, 7.4:1). Never white on orange (2.9:1 fails). |
+| `--on-accent` | `#0D0D0F` | Text/icons **on** an accent fill (dark, 6.8:1). Never white on orange (2.9:1 fails). |
 | `--track` | `#3A3A45` | Unfilled slider/seek track. |
 | `--track-buffer` | `#5A5A66` | Buffered/cached range on the seek bar. |
 | `--danger` | `#F0464A` | Errors, destructive actions, volume boost zone. |
@@ -78,7 +78,8 @@ Related: action IDs and shortcuts → [KEYBINDS_AND_CONFIG](KEYBINDS_AND_CONFIG.
 ### 2.3 Custom accent
 
 `interface.accent` accepts any hex colour (picker in Settings → Interface with 8 swatches + free input).
-Derived tokens are computed in `src/lib/color.ts` and written to `:root` at runtime:
+Derived tokens are computed in `src/lib/color.ts` and written to `:root` at runtime. The default orange is the
+exception: it keeps the hand-tuned values of §2.1 and §2.2, so the shipped look does not shift.
 
 | Token | Derivation (OKLCH) |
 |---|---|
@@ -87,6 +88,7 @@ Derived tokens are computed in `src/lib/color.ts` and written to `:root` at runt
 | `--accent-muted` | accent at 16 % alpha (14 % light theme) |
 | `--accent-text` | dark theme: lightness raised until ≥ 4.5:1 on `--bg-surface`; light theme: lowered until ≥ 4.5:1 on white |
 | `--on-accent` | `#0D0D0F` if contrast with accent ≥ 4.5:1, else `#FFFFFF` |
+| `--focus-ring` | the accent if it has ≥ 3:1 against `--bg-surface`, else `--accent-text` |
 
 Swatches: Cone Orange `#FF6B00` (default), Amber `#F5A300`, Red `#E5484D`, Pink `#E93D82`, Violet `#8E4EC6`, Blue `#3E8BFF`, Teal `#12A594`, Green `#46A758`.
 
@@ -835,12 +837,14 @@ If history tracking is off, only the open buttons show. No logo splash, no tips.
 ## 13. Accessibility and focus
 
 - **Contrast:** text ≥ 4.5:1, icons and control boundaries ≥ 3:1 against their surface, in both themes and for any custom accent (derivation in §2.3 enforces it).
-- **Focus ring:** `outline: 2px solid var(--accent); outline-offset: 2px`, shown on `:focus-visible` only. Never removed.
+- **Focus ring:** `outline: 2px solid var(--focus-ring); outline-offset: 2px`, shown on `:focus-visible` only. Never removed.
+  `--focus-ring` is the accent wherever the accent has ≥ 3:1 against the surface (the dark theme's default), and
+  `--accent-text` where it does not (the light theme, and custom accents that blend into the surface — §2.3).
 - **Player focus model** (critical for a keyboard-driven player):
   - Default focus is the *player root*. Single-key shortcuts are live.
   - **Pointer clicks never leave focus on chrome buttons** (bar buttons blur back to the player root after activation), so pressing Space after clicking Mute still toggles playback.
   - `Tab` / `Shift+Tab` move keyboard focus into and through the chrome (bars → dock → drawer). While a control has keyboard focus, its native keys (Space, Enter, arrows) go to it; all other shortcuts still work.
-  - `Esc` returns focus to the player root (then continues the escape chain: close popover → close overlay/drawer → leave Zen → leave PiP → leave fullscreen).
+  - `Esc` closes an open popover or overlay first, then returns focus to the player root, then continues the escape chain: close drawer → leave Zen → leave PiP → leave fullscreen (KEYBINDS_AND_CONFIG §2).
   - In text inputs only shortcuts with Ctrl/Alt (and Esc) fire.
 - Every control has an `aria-label`; toggles expose `aria-pressed`; sliders expose `role="slider"` with value text ("Volume 85 percent", "Subtitle delay minus 350 milliseconds").
 - Menus, popovers, tabs, and dialogs get roving focus, type-ahead, and focus trapping from Radix primitives.

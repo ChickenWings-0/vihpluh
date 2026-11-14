@@ -135,7 +135,10 @@ vihpluh/
 │   │   │                         #  ContextMenu, Osd, useAutoHide
 │   │   ├── sidebar/              # Sidebar + tabs/{Subtitles,Audio,Video,Playback,Bookmarks}
 │   │   │                         #  SubtitleTimeline, Equalizer, Inspector
-│   │   ├── queue/  library/  presets/  settings/  pip/  idle/
+│   │   ├── settings/             # schema.ts (the one settings schema), SettingsOverlay, controls,
+│   │   │                         #  search.ts, HotkeyEditor + hotkeys.ts, PresetsManager, extras
+│   │   ├── overlays/             # ShortcutsSheet, CommandPalette
+│   │   ├── queue/  library/  pip/  idle/
 │   ├── icons/                    # mono/*.svg, duotone/*.svg, index.ts
 │   ├── styles/                   # tokens.css, base.css
 │   └── lib/                      # time.ts, format.ts, color.ts, naturalSort.ts …
@@ -798,10 +801,12 @@ interface AppInfo {
 | `config_get` | — | `Config` |
 | `config_set` | `{ path: string, value: Json }` (dotted path, e.g. `"subtitles.font_size"`) | `void` |
 | `config_reset` | `{ path?: string }` | `void` |
+| `config_defaults` | — | `Config` (the shipped defaults: what Settings compares with and resets to) |
 | `keybinds_get` | — | `ResolvedKeymap` |
 | `keybinds_set` | `{ context: string, action: string, keys: string[] }` | `void` |
 | `keybinds_reset` | `{ action?: string }` | `void` |
-| `keybinds_set_base` | `{ base: "vihpluh" \| "vlc" \| "mpv" }` | `void` |
+| `keybinds_set_base` | `{ base: "vihpluh" \| "vlc" \| "mpv" \| "none" }` | `void` (the user's own bindings stay) |
+| `keybinds_remove_custom` | `{ index: number }` (position among the `[[custom]]` entries) | `void` |
 | `session_ui_get` | — | `UiState` (`{ sidebarOpen, sidebarTab, queueOpen, libraryOpen }`) |
 | `session_ui_set` | `Partial<UiState>` | `void` (debounced into `session.json`) |
 | `window_get_state` | — | `WindowState` (`{ mode, maximized, minimized, focused, alwaysOnTop }`) |
@@ -939,7 +944,8 @@ survive renames/moves):
 ### 9.3 `config.toml` and `keybinds.toml`
 
 Full key reference, defaults, and file formats: [KEYBINDS_AND_CONFIG.md](KEYBINDS_AND_CONFIG.md).
-Both carry `schema = <int>`; `config/migrate.rs` upgrades older files in place after writing a `.bak`.
+Both carry `schema = <int>`; `config/migrate.rs` upgrades older files in place after writing a `.bak`
+(run when each store opens; schema 1 is the first, so the lists of steps are still empty).
 Writes go through `toml_edit` so user comments and ordering are preserved. Both files are watched; external edits apply live.
 
 ### 9.4 `session.json`
@@ -1529,6 +1535,9 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D36 | Preset files are read through a struct with the four sections as plain fields, not `serde(flatten)` | Through a flattened struct the TOML parser loses the position of an error, and the toast must name the line. |
 | D37 | Stream lists are downloaded with mpv (`stream-dump` on a headless handle), not an HTTP client crate | One network stack for everything: proxy, user agent, TLS, and timeouts behave exactly as for playback, and the binary gains no dependency. |
 | D38 | Gapless playback appends only the next item to mpv's playlist and lets the core adopt the file mpv moves to | The queue stays the single authority (D4): mpv never holds more than one item it was not told to load, and every queue edit can correct it. A gap-free join needs mpv to open the next file itself. |
+| D39 | `ui.escape` closes Settings, the shortcuts sheet, or the palette *before* returning focus to the player | The overlays behave like a popover: with focus in their search field, the earlier order needed two presses to close them, and the first one appeared to do nothing. |
+| D40 | The default accent keeps the stylesheet's hand-tuned tokens; derived tokens (DESIGN_SYSTEM §2.3) are written only for a custom accent, and a `--focus-ring` token is derived with them | Deriving the default too shifted the shipped look (accent text `#FF7A1A` became `#FF6B00`). The ring was the bare accent, which a pale accent on white or a dark one on the dark theme made invisible; it now falls back to the readable accent shade when the accent has under 3:1 against the surface. |
+| D41 | The hotkey editor lists actions from the frontend's action registry, not from the resolved keymap, and each custom binding carries its position in the file | With `base = "none"` the keymap names no actions, so there would be nothing to bind. Deleting a `[[custom]]` entry by its position among the *valid* ones could remove the wrong entry when the file also holds an invalid one. |
 
 ### Open risks (each owned by a Phase 1 spike)
 

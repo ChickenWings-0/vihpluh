@@ -19,6 +19,9 @@ import { Dock } from "./features/dock/Dock";
 import { IdleScreen } from "./features/idle/IdleScreen";
 import { LibraryDrawer, LibraryScrim } from "./features/library/LibraryDrawer";
 import { PromptDialog } from "./features/library/PromptDialog";
+import { CommandPalette } from "./features/overlays/CommandPalette";
+import { ShortcutsSheet } from "./features/overlays/ShortcutsSheet";
+import { SettingsOverlay } from "./features/settings/SettingsOverlay";
 import { appReady } from "./ipc/commands";
 import { useAppStore } from "./stores/app";
 import { reportError } from "./stores/osd";
@@ -65,6 +68,9 @@ export function App() {
         <LibraryScrim />
         <Dock />
         <LibraryDrawer />
+        <SettingsOverlay />
+        <ShortcutsSheet />
+        <CommandPalette />
         <PromptDialog />
         <ContextMenu />
         <Toasts />

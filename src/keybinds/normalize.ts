@@ -118,23 +118,50 @@ export function bindingFromWheel(
   return withModifiers(name, e);
 }
 
-/** How a binding is shown on a key cap (US names for now; layout glyphs arrive in Phase 10). */
+/**
+ * Glyphs of the current keyboard layout for the keys bindings name by position (§3.1): on an
+ * AZERTY layout the key bound as `Q` is shown as `A`. Filled from the Keyboard Layout Map API
+ * when the webview has it; otherwise the US names are shown.
+ */
+let layoutGlyphs: ReadonlyMap<string, string> = new Map();
+
+export function setLayoutGlyphs(codeToGlyph: Iterable<[code: string, glyph: string]>): void {
+  const glyphs = new Map<string, string>();
+  for (const [code, glyph] of codeToGlyph) {
+    const key = keyFromCode(code);
+    // Only printable single keys differ between layouts.
+    if (key?.length !== 1 || glyph.trim().length !== 1) continue;
+    const shown = glyph.toUpperCase();
+    if (shown !== key) glyphs.set(key, shown);
+  }
+  layoutGlyphs = glyphs;
+}
+
+const PRETTY: Record<string, string> = {
+  Up: "↑",
+  Down: "↓",
+  Left: "←",
+  Right: "→",
+  MouseLeft: "Click",
+  MouseLeftDouble: "Double-click",
+  MouseMiddle: "Middle-click",
+  MouseRight: "Right-click",
+  MouseBack: "Mouse back",
+  MouseForward: "Mouse forward",
+  WheelUp: "Wheel ↑",
+  WheelDown: "Wheel ↓",
+  WheelLeft: "Wheel ←",
+  WheelRight: "Wheel →",
+  Escape: "Esc",
+};
+
+/** How a binding is shown on a key cap: arrows and mouse names, and the layout's own glyphs. */
 export function displayBinding(binding: string): string {
-  const pretty: Record<string, string> = {
-    Up: "↑",
-    Down: "↓",
-    Left: "←",
-    Right: "→",
-    MouseLeft: "Click",
-    MouseLeftDouble: "Double-click",
-    MouseMiddle: "Middle-click",
-    MouseRight: "Right-click",
-    WheelUp: "Wheel ↑",
-    WheelDown: "Wheel ↓",
-    Escape: "Esc",
-  };
-  return binding
-    .split("+")
-    .map((part) => pretty[part] ?? part)
+  // The key itself may be "+", so only the modifiers are split off.
+  const parts = binding.split("+");
+  return parts
+    .map((part, i) =>
+      i === parts.length - 1 ? (PRETTY[part] ?? layoutGlyphs.get(part) ?? part) : part,
+    )
     .join("+");
 }

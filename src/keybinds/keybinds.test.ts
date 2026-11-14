@@ -7,9 +7,37 @@ import {
   bindingFromWheel,
   displayBinding,
   keyFromCode,
+  setLayoutGlyphs,
 } from "./normalize";
 
 const none = { ctrlKey: false, altKey: false, shiftKey: false, metaKey: false };
+
+describe("key caps", () => {
+  it("show arrows and mouse names, and leave modifiers alone", () => {
+    expect(displayBinding("Ctrl+Shift+Left")).toBe("Ctrl+Shift+←");
+    expect(displayBinding("MouseLeftDouble")).toBe("Double-click");
+    expect(displayBinding("Shift+WheelDown")).toBe("Shift+Wheel ↓");
+    expect(displayBinding("Escape")).toBe("Esc");
+  });
+
+  it("show the current layout's glyph for keys named by position", () => {
+    // AZERTY: the key at the US Q position prints A; the one at ; prints M.
+    setLayoutGlyphs([
+      ["KeyQ", "a"],
+      ["KeyA", "q"],
+      ["Semicolon", "m"],
+      ["KeyK", "k"],
+      ["ArrowLeft", "x"],
+    ]);
+    expect(displayBinding("Ctrl+Q")).toBe("Ctrl+A");
+    expect(displayBinding("A")).toBe("Q");
+    expect(displayBinding(";")).toBe("M");
+    expect(displayBinding("K")).toBe("K");
+    expect(displayBinding("Left")).toBe("←");
+    setLayoutGlyphs([]);
+    expect(displayBinding("Ctrl+Q")).toBe("Ctrl+Q");
+  });
+});
 
 describe("normalize", () => {
   it("names physical keys", () => {
@@ -68,7 +96,9 @@ const keymap: ResolvedKeymap = {
     },
     queue: { "queue.remove_selected": ["Delete", "Backspace"] },
   },
-  custom: [{ keys: ["F9"], action: "player.set_speed", args: { value: 1.75 }, label: null }],
+  custom: [
+    { keys: ["F9"], action: "player.set_speed", args: { value: 1.75 }, label: null, index: 0 },
+  ],
   warnings: [],
 };
 

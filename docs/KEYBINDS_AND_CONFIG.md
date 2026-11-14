@@ -149,7 +149,7 @@ Keys are physical US-layout positions (§3.1). "—" = unbound by default.
 | `mpv.command` | Raw mpv command (custom bindings only, §3.4) | — |
 
 **`ui.escape` chain** — the first applicable step runs, then stops:
-close menu/popover → return keyboard focus to the player → close settings / shortcuts / palette →
+close menu/popover → close settings / shortcuts / palette → return keyboard focus to the player →
 close library drawer → leave Zen → leave PiP → leave fullscreen. It never closes the dock and never pauses.
 A hover tooltip also closes on Escape but does not use up the key.
 
@@ -176,7 +176,7 @@ Active only while focus is inside that panel; they take precedence over global b
 
 `keybinds.toml` → `base = "vlc"` or `"mpv"` swaps the whole default layer for a faithful transcription of that
 player's stock bindings, mapped onto the same action IDs (actions with no equivalent stay unbound). Shipped as
-`resources/keymaps/vlc.toml` and `resources/keymaps/mpv.toml` (Phase 10). `base = "none"` starts empty.
+`resources/keymaps/vlc.toml` and `resources/keymaps/mpv.toml`. `base = "none"` starts empty.
 
 ---
 
@@ -300,12 +300,14 @@ Parameterised actions available to `[[custom]]` only:
 |---|---|
 | Layout | Actions grouped as in §2, one 32 px row each: label · key caps · `+`. Context-scoped groups carry a chip ("Queue", "Library"). |
 | Search | Filters by label and action ID. **Find by key**: toggle it, press any combination, and the list filters to whatever that key triggers. |
-| Add | `+` (or Enter on the row) enters capture: the row shows "Press a key… (Esc to cancel)". The next non-modifier key/mouse/wheel event becomes the binding. |
+| Add | `+` enters capture: the row shows "Press a key… (Esc to cancel)". The next non-modifier key becomes the binding; a mouse button or wheel notch does too when it happens over that box (a click anywhere else cancels, so the rest of the editor stays usable). |
 | Edit / remove | Click a key cap → capture replaces it. Hover a cap → `✕` removes it. `Backspace` on a focused cap removes it. |
-| Conflicts | If the captured key is already bound in the same context, an inline bar appears: "`Ctrl+B` is used by **Add bookmark here**. [Replace] [Keep both off] [Cancel]". Nothing changes until chosen. Reserved keys (`Tab`, `Shift+Tab`) are refused with a reason. |
-| Reset | ⟲ per row (only when modified); "Reset all…" asks once. |
+| Conflicts | If the captured key is already bound in the same context, an inline bar appears: "`Ctrl+B` is used by **Add bookmark here**. [Replace] [Keep both off] [Cancel]". Nothing changes until chosen. Replace moves the key to this action; Keep both off unbinds it from the other action and leaves this one as it was. Reserved keys (`Tab`, `Shift+Tab`) are refused with a reason. |
+| Reset | ⟲ per row (only when modified); "Reset all…" asks once and keeps `[[custom]]` bindings. |
 | Persistence | Each change is written to `keybinds.toml` immediately via `keybinds_set`; only differences from the base are stored. |
 | Keymap select | Switches `base`; user overrides are kept and re-layered. |
+
+**Custom rows:** `[[custom]]` bindings (§3.4) are listed under their own heading with their keys and a delete button; they are created in the file.
 
 **Shortcuts sheet** (`F1`): a read-only two-column overlay of every bound action in the current keymap, searchable, generated from the same data.
 
@@ -355,7 +357,7 @@ Settings marked ⟳ apply after restart; everything else applies live.
 | `interface.osd_shortcut_badge` | bool | `false` | Show the shortcut I pressed | Adds the key you pressed to the on-screen feedback. |
 | `interface.osd_position` | enum(`top-left`\|`top-center`\|`top-right`) | `top-center` | Feedback position | Where on-screen feedback appears. |
 | `interface.osd_duration_ms` | int 300–5000 | `1200` | Feedback duration | How long on-screen feedback stays visible. |
-| `interface.tooltip_shortcuts` | bool | `true` | Show shortcuts in tooltips | |
+| `interface.tooltip_shortcuts` | bool | `true` | Show shortcuts in tooltips | Adds each control's current key to its tooltip. |
 | `interface.reduce_motion` | enum(`system`\|`on`\|`off`) | `system` | Reduce motion | Turns off interface animation. |
 | `interface.pip_width` | int 240–960 | `480` | Picture-in-picture width | Height follows the video's shape. |
 | `interface.pip_corner` | enum(`top-left`\|`top-right`\|`bottom-left`\|`bottom-right`) | `bottom-right` | Picture-in-picture corner | Not available on Wayland, where the compositor places windows. |
@@ -371,12 +373,12 @@ Shortcuts themselves are edited in the hotkey editor (§4) and stored in `keybin
 | `controls.seek_large_s` | float | `60` | Large seek step | Seconds for Ctrl+← / Ctrl+→. |
 | `controls.precise_seek` | bool | `true` | Land exactly where I seek | Off jumps to the nearest keyframe: faster on very large files, less exact. |
 | `controls.volume_step` | float | `5` | Volume step | Percent per key press or wheel notch. |
-| `controls.speed_step` | float | `0.1` | Speed step | |
+| `controls.speed_step` | float | `0.1` | Speed step | Change in playback speed per key press. |
 | `controls.sub_delay_step_ms` | int | `50` | Subtitle delay step | Milliseconds per key press. |
 | `controls.audio_delay_step_ms` | int | `50` | Audio delay step | Milliseconds per key press. |
 | `controls.sub_size_step` | float | `0.05` | Subtitle size step | Change in scale per key press. |
-| `controls.zoom_step` | float | `0.1` | Zoom step | |
-| `controls.drag_moves_window` | bool | `true` | Drag the video to move the window | |
+| `controls.zoom_step` | float | `0.1` | Zoom step | Change in video zoom per key press. |
+| `controls.drag_moves_window` | bool | `true` | Drag the video to move the window | Off leaves dragging on the video doing nothing. |
 | `controls.wheel_invert` | bool | `false` | Reverse scroll direction | Swaps what wheel-up and wheel-down do. |
 
 ### 5.4 Playback
@@ -387,10 +389,10 @@ Shortcuts themselves are edited in the hotkey editor (§4) and stored in `keybin
 | `playback.remember_per_file` | bool | `true` | Remember tracks and delays per file | Restores the audio track, subtitle track, and sync you last used for each file. |
 | `playback.auto_queue_folder` | bool | `true` | Queue the rest of the folder | Opening one file lines up the others in its folder so Next plays the next episode. |
 | `playback.at_queue_end` | enum(`hold`\|`stop`\|`quit`) | `hold` | When the queue finishes | Hold keeps the last frame on screen; stop returns to the start screen. |
-| `playback.autoplay` | bool | `true` | Start playing when a file opens | |
-| `playback.default_speed` | float 0.25–4 | `1.0` | Default speed | |
+| `playback.autoplay` | bool | `true` | Start playing when a file opens | Off opens files paused. |
+| `playback.default_speed` | float 0.25–4 | `1.0` | Default speed | The speed every file starts at. |
 | `playback.pitch_correction` | bool | `true` | Keep pitch when changing speed | Off makes voices higher or lower as speed changes. |
-| `playback.sleep_action` | enum(`pause`\|`quit`) | `pause` | When the sleep timer ends | |
+| `playback.sleep_action` | enum(`pause`\|`quit`) | `pause` | When the sleep timer ends | Pause playback, or quit vihpluh. |
 | `playback.finished_percent` | int 80–100 | `95` | Count as finished at | Past this point a file is marked watched and won't resume. |
 | `playback.presets_enabled` | bool | `true` | Apply presets automatically | Presets are saved from the bar at the bottom of the side panel. |
 
@@ -409,7 +411,7 @@ The **Presets** manager (list, enable/disable, edit match rule, delete, reveal f
 | `video.deband` | bool | `false` | Debanding | Smooths colour banding in gradients. | `deband` |
 | `video.interpolation` | bool | `false` | Motion interpolation | Smooths motion by blending frames to match your display. | `interpolation` + `video-sync=display-resample` |
 | `video.sync` | enum(`audio`\|`display-resample`) | `audio` | Timing source | Display sync reduces judder but slightly resamples audio. | `video-sync` |
-| `video.default_aspect` | string | `auto` | Default aspect ratio | | `video-aspect-override` |
+| `video.default_aspect` | string | `auto` | Default aspect ratio | The shape every video starts with. Auto uses the file's own. | `video-aspect-override` |
 | `video.linux_force_xwayland` ⟳ | bool | `false` | Run through XWayland (Linux) | Compatibility switch if video misbehaves under Wayland. | sets `GDK_BACKEND=x11` |
 
 ### 5.6 Audio
@@ -418,15 +420,15 @@ The **Presets** manager (list, enable/disable, edit match rule, delete, reveal f
 |---|---|---|---|---|---|
 | `audio.device` | string | `auto` | Output device | Auto follows the system default. | `audio-device` |
 | `audio.preferred_languages` | list<string> | `["eng","en"]` | Preferred audio languages | First available language in this list is chosen. Use codes like eng, jpn. | `alang` |
-| `audio.remember_volume` | bool | `true` | Remember volume | | — |
+| `audio.remember_volume` | bool | `true` | Remember volume | Starts at the volume you last used. | — |
 | `audio.default_volume` | float 0–150 | `100` | Starting volume | Used when volume isn't remembered. | `volume` |
 | `audio.max_volume` | int 100–150 | `130` | Maximum volume | Above 100 % boosts quiet audio and can distort. | `volume-max` |
 | `audio.normalize` | bool | `false` | Volume normalisation | Evens out loud and quiet moments. | `af` dynaudnorm |
 | `audio.channels` | enum(`auto`\|`stereo`\|`5.1`\|`7.1`) | `auto` | Speaker layout | Auto matches your output device. | `audio-channels` |
 | `audio.passthrough` | list<string> | `[]` | Pass through to receiver | Formats sent undecoded to an AV receiver: ac3, eac3, dts, dts-hd, truehd. | `audio-spdif` |
 | `audio.exclusive` | bool | `false` | Exclusive output | Bypasses the system mixer. Other apps go silent while playing. | `audio-exclusive` |
-| `audio.equalizer_enabled` | bool | `false` | Equalizer | | — |
-| `audio.equalizer_preset` | string | `"flat"` | Equalizer preset | | — |
+| `audio.equalizer_enabled` | bool | `false` | Equalizer | Shapes the sound with the preset below. The side panel has the full editor. | — |
+| `audio.equalizer_preset` | string | `"flat"` | Equalizer preset | The preset used when the equalizer is on. | — |
 | `audio.gapless` | enum(`weak`\|`yes`\|`no`) | `weak` | Gapless playback | Removes the gap between tracks of the same album. | `gapless-audio` |
 | `audio.replaygain` | enum(`off`\|`track`\|`album`) | `off` | ReplayGain | Uses loudness tags in music files to level volume. | `replaygain` |
 
@@ -441,15 +443,15 @@ The **Presets** manager (list, enable/disable, edit match rule, delete, reveal f
 | `subtitles.extra_dirs` | list<string> | `["Subs","Subtitles","subs"]` | Subtitle subfolders | Folder names next to the video to search for subtitles. | `sub-file-paths` |
 | `subtitles.font` | string | `""` | Font | Empty uses the system sans-serif. | `sub-font` |
 | `subtitles.font_size` | float 10–120 | `42` | Font size | Exact size; presets S/M/L/XL in the side panel scale it. | `sub-font-size` |
-| `subtitles.scale` | float 0.5–3 | `1.0` | Size multiplier | | `sub-scale` |
-| `subtitles.bold` | bool | `false` | Bold | | `sub-bold` |
-| `subtitles.color` | color | `"#FFFFFF"` | Text colour | | `sub-color` |
-| `subtitles.outline_color` | color | `"#000000"` | Outline colour | | `sub-outline-color` |
-| `subtitles.outline_size` | float 0–10 | `3.0` | Outline thickness | | `sub-outline-size` |
-| `subtitles.shadow_offset` | float 0–10 | `0` | Shadow | | `sub-shadow-offset` |
+| `subtitles.scale` | float 0.5–3 | `1.0` | Size multiplier | Multiplies the size of every subtitle, styled ones included. | `sub-scale` |
+| `subtitles.bold` | bool | `false` | Bold | Draws subtitle text in a bold weight. | `sub-bold` |
+| `subtitles.color` | color | `"#FFFFFF"` | Text colour | The colour of subtitle text. | `sub-color` |
+| `subtitles.outline_color` | color | `"#000000"` | Outline colour | The colour of the border around subtitle text. | `sub-outline-color` |
+| `subtitles.outline_size` | float 0–10 | `3.0` | Outline thickness | How thick the border around subtitle text is. 0 turns it off. | `sub-outline-size` |
+| `subtitles.shadow_offset` | float 0–10 | `0` | Shadow | How far the drop shadow sits from the text. 0 turns it off. | `sub-shadow-offset` |
 | `subtitles.background` | enum(`none`\|`box`) | `none` | Background | A box improves legibility over busy scenes. | `sub-border-style`, `sub-back-color` |
 | `subtitles.position` | int 0–100 | `100` | Vertical position | 100 = bottom. Lower moves subtitles up. | `sub-pos` |
-| `subtitles.margin_y` | int 0–200 | `30` | Bottom margin | | `sub-margin-y` |
+| `subtitles.margin_y` | int 0–200 | `30` | Bottom margin | Space kept between subtitles and the edge of the picture. | `sub-margin-y` |
 | `subtitles.ass_override` | enum(`no`\|`scale`\|`force`\|`strip`) | `scale` | Styled (ASS) subtitles | Keep their styling; keep it but apply my size; override with my style; or strip to plain text. | `sub-ass-override` |
 | `subtitles.fix_timing` | bool | `false` | Close small gaps between lines | Removes flicker between consecutive lines. | `sub-fix-timing` |
 | `subtitles.encoding` | string | `auto` | Text encoding | Change only if characters look garbled. | `sub-codepage` |
@@ -461,12 +463,12 @@ Library and pinned folders are managed in the Library drawer and in this page (l
 | Key | Type | Default | Label | Tooltip |
 |---|---|---|---|---|
 | `library.track_history` | bool | `true` | Remember what I played | Needed for Recent and for continuing where you left off. Off writes no history. |
-| `library.scan_on_startup` | bool | `true` | Check folders for changes at startup | |
+| `library.scan_on_startup` | bool | `true` | Check folders for changes at startup | Looks for new, moved, and deleted files each time vihpluh starts. |
 | `library.watch_folders` | bool | `true` | Watch folders while running | Picks up new files without a rescan. |
 | `library.group_series` | bool | `true` | Group episodes into series | Uses file names to group seasons and episodes. |
 | `library.extra_extensions` | list<string> | `[]` | Additional file types | Extensions to treat as media, without the dot. |
 | `library.ignore_patterns` | list<string> | `["**/.*","**/*sample*"]` | Ignore | Paths matching these patterns are skipped. |
-| `library.recent_limit` | int 0–500 | `50` | Recent items to keep | |
+| `library.recent_limit` | int 0–500 | `50` | Recent items to keep | How many entries the Recent list holds. 0 keeps none. |
 
 ### 5.9 Network
 
@@ -477,9 +479,9 @@ Library and pinned folders are managed in the Library drawer and in this page (l
 | `network.user_agent` | string | `""` | Browser identity | Some streams need a specific user agent. Empty uses the default. | `user-agent` |
 | `network.proxy` | string | `""` | Proxy | For example http://127.0.0.1:8080. | `http-proxy` |
 | `network.cache_secs` | int 1–600 | `30` | Stream buffer | Seconds of stream to buffer ahead. | `cache-secs` |
-| `network.timeout_s` | int 1–120 | `20` | Connection timeout | | `network-timeout` |
-| `network.auto_reconnect` | bool | `true` | Reconnect dropped streams | | `stream-lavf-o=reconnect…` |
-| `network.hls_bitrate` | enum(`max`\|`min`) or int | `max` | Adaptive stream quality | | `hls-bitrate` |
+| `network.timeout_s` | int 1–120 | `20` | Connection timeout | How long to wait for a stream to answer before giving up. | `network-timeout` |
+| `network.auto_reconnect` | bool | `true` | Reconnect dropped streams | Tries again when a stream's connection drops instead of stopping. | `stream-lavf-o=reconnect…` |
+| `network.hls_bitrate` | enum(`max`\|`min`) or int | `max` | Adaptive stream quality | Which variant of an adaptive stream to play: the best, the lightest, or a bitrate cap. | `hls-bitrate` |
 | `network.load_remote_artwork` | bool | `false` | Load channel logos | Downloads images referenced by stream lists. Off keeps vihpluh fully offline unless you open a stream. | — |
 
 ### 5.10 Performance
@@ -488,7 +490,7 @@ Library and pinned folders are managed in the Library drawer and in this page (l
 |---|---|---|---|---|---|
 | `performance.demuxer_cache_mb` | int 32–4096 | `512` | Read-ahead memory | Memory for buffering ahead. Larger helps high-bitrate files on slow or network drives. | `demuxer-max-bytes` |
 | `performance.demuxer_back_cache_mb` | int 0–2048 | `128` | Seek-back memory | Memory kept behind the playhead so short rewinds are instant. | `demuxer-max-back-bytes` |
-| `performance.readahead_secs` | int 1–120 | `20` | Read-ahead time | | `demuxer-readahead-secs` |
+| `performance.readahead_secs` | int 1–120 | `20` | Read-ahead time | How many seconds of the file are read ahead of the playhead. | `demuxer-readahead-secs` |
 | `performance.software_threads` | int 0–64 | `0` | Software decoding threads | 0 = automatic. | `vd-lavc-threads` |
 | `performance.thumbnail_hwdec` | string | `"auto-copy"` | Decoder for previews | Use "no" if previews cause stutter. | thumbnail handle `hwdec` |
 | `performance.waveform` | enum(`on_demand`\|`always`\|`off`) | `on_demand` | Analyse audio for waveforms | On demand analyses a file the first time a waveform is shown. | — |

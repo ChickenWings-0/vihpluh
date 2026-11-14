@@ -35,14 +35,15 @@ function ownsNativeKeys(target: EventTarget | null): boolean {
 }
 
 /**
- * A menu, popover, or dialog is open: it handles Escape itself. Tooltips do not count — they
+ * A menu, popover, or dialog is open: it handles Escape itself. (The full-window overlays
+ * are closed by `ui.escape` instead, so Escape works wherever focus is.) Tooltips do not count — they
  * are transient and close on Escape too, but must not swallow the key (a lingering hover
  * tooltip would otherwise block leaving fullscreen).
  */
 function floatingLayerOpen(): boolean {
   return (
     document.querySelector(
-      "[data-radix-popper-content-wrapper] [role=menu], [data-radix-popper-content-wrapper] [role=dialog], [role=dialog]",
+      "[data-radix-popper-content-wrapper] [role=menu], [data-radix-popper-content-wrapper] [role=dialog], [role=dialog]:not([data-overlay])",
     ) !== null
   );
 }
@@ -56,6 +57,8 @@ export function useKeyboard(): void {
       if (!binding) return;
       if (binding === "Escape" && floatingLayerOpen()) return;
       const ui = useUiStore.getState();
+      // The hotkey editor is recording this key as a binding (KEYBINDS_AND_CONFIG §4).
+      if (ui.capturingKey) return;
       const match = resolveBinding(useKeymapStore.getState().lookup, binding, {
         context: ui.keyContext,
         inTextInput: isTextInput(e.target),

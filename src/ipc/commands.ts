@@ -228,6 +228,15 @@ export const inspectorSubscribe = (enabled: boolean) =>
 
 // ── keybinds ─────────────────────────────────────────────────────────────────
 export const keybindsGet = () => invoke<ResolvedKeymap>("keybinds_get");
+/** Replaces an action's keys in one context; `[]` unbinds it. */
+export const keybindsSet = (context: string, action: string, keys: string[]) =>
+  invoke<void>("keybinds_set", { context, action, keys });
+/** One action, or (without it) every action, back to the base keymap. */
+export const keybindsReset = (action?: string) =>
+  invoke<void>("keybinds_reset", { action: action ?? null });
+export const keybindsSetBase = (base: string) => invoke<void>("keybinds_set_base", { base });
+export const keybindsRemoveCustom = (index: number) =>
+  invoke<void>("keybinds_remove_custom", { index });
 
 // ── window ───────────────────────────────────────────────────────────────────
 export const windowGetState = () => invoke<WindowState>("window_get_state");
@@ -242,6 +251,7 @@ export const windowClose = () => invoke<void>("window_close");
 export const configGet = () => invoke<Config>("config_get");
 export const configSet = (path: string, value: unknown) =>
   invoke<void>("config_set", { path, value });
+export const configDefaults = () => invoke<Config>("config_defaults");
 export const configReset = (path?: string) => invoke<void>("config_reset", { path });
 
 // ── media services (ARCHITECTURE §11) ────────────────────────────────────────

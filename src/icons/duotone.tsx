@@ -109,3 +109,76 @@ export function LibraryDuo(props: DuoProps) {
     </Duo>
   );
 }
+
+/** Two slider tracks with their knobs. */
+export function GeneralDuo(props: DuoProps) {
+  return (
+    <Duo {...props}>
+      <path className="duo-base" d="M2 6h20v2.5H2zm0 9.5h20V18H2z" />
+      <path className="duo-accent" d="M13 3.5h4v7.5h-4zM6 13h4v7.5H6z" />
+    </Duo>
+  );
+}
+
+/** Window frame with a panel docked on the right. */
+export function InterfaceDuo(props: DuoProps) {
+  return (
+    <Duo {...props}>
+      <path
+        className="duo-base"
+        d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
+      />
+      <path className="duo-accent" d="M15 7h4.5v10H15z" />
+    </Duo>
+  );
+}
+
+/** Keyboard with one key picked out. */
+export function ControlsDuo(props: DuoProps) {
+  return (
+    <Duo {...props}>
+      <path
+        className="duo-base"
+        d="M3 5h18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm1 3v3h3V8zm9.5 0v3h3V8zm4.5 0v3h2V8zM4 13v3h2v-3zm14 0v3h2v-3z"
+        fillRule="evenodd"
+      />
+      <path className="duo-accent" d="M8.75 8h3v3h-3zM8 13h8v3H8z" />
+    </Duo>
+  );
+}
+
+/** Disc with a play triangle. */
+export function PlaybackDuo(props: DuoProps) {
+  return (
+    <Duo {...props}>
+      <path className="duo-base" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" />
+      <path className="duo-accent" d="M9.5 7.5v9l7.5-4.5z" />
+    </Duo>
+  );
+}
+
+/** Caption box with two lines of text. */
+export function SubtitlesDuo(props: DuoProps) {
+  return (
+    <Duo {...props}>
+      <path
+        className="duo-base"
+        d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
+      />
+      <path className="duo-accent" d="M5 11h6v2.3H5zm8 0h6v2.3h-6zM5 15h9v2.3H5zm11 0h3v2.3h-3z" />
+    </Duo>
+  );
+}
+
+/** Gauge with its needle. */
+export function PerformanceDuo(props: DuoProps) {
+  return (
+    <Duo {...props}>
+      <path
+        className="duo-base"
+        d="M12 4a10 10 0 0 1 10 10v4a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-4A10 10 0 0 1 12 4z"
+      />
+      <path className="duo-accent" d="M16.6 7.6l1.6 1.2-4.3 5.9a2.2 2.2 0 1 1-1.7-1.2z" />
+    </Duo>
+  );
+}

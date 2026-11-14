@@ -36,9 +36,9 @@ import {
 } from "@/lib/subtitleTimeline";
 import { useAnimationFrame } from "@/lib/useAnimationFrame";
 import { loudest } from "@/lib/waveform";
-import { useConfig } from "@/stores/config";
 import { reportError } from "@/stores/osd";
 import { usePlayer } from "@/stores/player";
+import { useThemeStore } from "@/stores/theme";
 import { getDuration, getPosition } from "@/stores/time";
 import { useUiStore } from "@/stores/ui";
 import { useWaveform } from "../chrome/useWaveform";
@@ -157,8 +157,8 @@ export function SubtitleTimeline() {
   const key = usePlayer((s) => s.media?.key ?? "") ?? "";
   const trackId = usePlayer((s) => s.selected.sub) ?? null;
   const delayMs = usePlayer((s) => s.subDelayMs) ?? 0;
-  const theme = useConfig((c) => c.interface.theme);
-  const accent = useConfig((c) => c.interface.accent);
+  const theme = useThemeStore((s) => s.resolved);
+  const accent = useThemeStore((s) => s.accent);
   const hold = useUiStore((s) => s.hold);
   const [span, setSpan] = useState<number>(DEFAULT_SPAN);
   const { cues, coverage } = useCues(key, trackId);

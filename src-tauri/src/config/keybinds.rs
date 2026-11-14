@@ -96,6 +96,9 @@ pub struct CustomBinding {
     #[ts(type = "Record<string, unknown>")]
     pub args: serde_json::Value,
     pub label: Option<String>,
+    /// Its position among the file's `[[custom]]` entries (what `keybinds_remove_custom`
+    /// takes): entries that failed validation are skipped here but still count.
+    pub index: usize,
 }
 
 /// What the frontend matches keys against.
@@ -316,7 +319,7 @@ fn read_custom(doc: &DocumentMut, warnings: &mut Vec<String>) -> Vec<CustomBindi
             .map(|item| item_to_json(item, warnings))
             .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
         let label = table.get("label").and_then(Item::as_str).map(str::to_string);
-        out.push(CustomBinding { keys, action: action.to_string(), args, label });
+        out.push(CustomBinding { keys, action: action.to_string(), args, label, index });
     }
     out
 }
@@ -899,9 +902,16 @@ mod tests {
             [[custom]]
             keys = ["F9"]
             action = "player.toggle_pause"
+
+            [[custom]]
+            keys = ["F8"]
+            action = "player.set_speed"
+            args = { value = 2 }
         "#;
         let map = resolve(VIHPLUH_KEYMAP, "vihpluh", Some(user));
-        assert_eq!(map.custom.len(), 2);
+        assert_eq!(map.custom.len(), 3);
+        // The refused entry still counts towards file positions.
+        assert_eq!(map.custom.iter().map(|c| c.index).collect::<Vec<_>>(), [0, 1, 3]);
         assert_eq!(map.custom[0].args, serde_json::json!({ "seconds": 85 }));
         assert_eq!(map.custom[1].label.as_deref(), Some("Toggle deinterlace"));
         assert_eq!(map.custom[1].args, serde_json::json!({ "command": ["cycle", "deinterlace"] }));

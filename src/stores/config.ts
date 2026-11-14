@@ -4,6 +4,9 @@ import type { Config } from "@/ipc/bindings/Config";
 
 interface ConfigStore {
   config: Config | null;
+  /** The shipped defaults (`config_defaults`): what Settings compares with. */
+  defaults: Config | null;
+  setDefaults: (defaults: Config) => void;
   setConfig: (config: Config) => void;
   /** Applies one changed key (dotted path, snake_case segments as in `config.toml`). */
   applyChange: (path: string, value: unknown) => void;
@@ -33,6 +36,8 @@ export function setAtPath<T extends object>(root: T, path: string, value: unknow
 
 export const useConfigStore = create<ConfigStore>((set, get) => ({
   config: null,
+  defaults: null,
+  setDefaults: (defaults) => set({ defaults }),
   setConfig: (config) => set({ config }),
   applyChange: (path, value) => {
     const current = get().config;

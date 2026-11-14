@@ -3,4 +3,9 @@
 /**
  * One `[[custom]]` entry, validated.
  */
-export type CustomBinding = { keys: Array<string>, action: string, args: Record<string, unknown>, label: string | null, };
+export type CustomBinding = { keys: Array<string>, action: string, args: Record<string, unknown>, label: string | null, 
+/**
+ * Its position among the file's `[[custom]]` entries (what `keybinds_remove_custom`
+ * takes): entries that failed validation are skipped here but still count.
+ */
+index: number, };
