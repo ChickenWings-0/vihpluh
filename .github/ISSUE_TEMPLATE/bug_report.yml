@@ -1,0 +1,127 @@
+name: Bug report
+description: Something does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please check the [User Guide](https://github.com/ChickenWings-0/vihpluh/blob/main/docs/USER_GUIDE.md#10-troubleshooting) troubleshooting table first.
+        **Security problems:** do not report them here. See [SECURITY.md](https://github.com/ChickenWings-0/vihpluh/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        1. Open a 4K HEVC file
+        2. Press F
+        3. The picture goes black, sound continues
+    validations:
+      required: true
+
+  - type: textarea
+    id: version
+    attributes:
+      label: vihpluh version
+      description: Output of `vihpluh --version`, which prints the vihpluh, mpv, and FFmpeg versions and the video backend.
+      placeholder: |
+        vihpluh 0.1.0
+        mpv v0.40.0-…
+        ffmpeg …
+        video backend: …
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Fedora
+        - Other Linux (say which below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: session
+    attributes:
+      label: Session type
+      description: On Linux, `echo $XDG_SESSION_TYPE`.
+      options:
+        - Windows
+        - Wayland
+        - X11
+    validations:
+      required: true
+
+  - type: input
+    id: desktop
+    attributes:
+      label: OS version and desktop
+      placeholder: "Windows 11 24H2 / Fedora 44, GNOME 48"
+
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver version
+      placeholder: "NVIDIA RTX 4070 Laptop, driver 581.xx / AMD RX 7800 XT, Mesa 25.x"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How vihpluh was installed
+      options:
+        - Windows installer
+        - Portable zip
+        - Fedora RPM
+        - Built from source
+    validations:
+      required: true
+
+  - type: textarea
+    id: inspector
+    attributes:
+      label: Stream inspector
+      description: |
+        Play the file, press `I`, and use the inspector's copy button (Playback tab). The "Decoder" line
+        shows `hwdec-current`, e.g. `d3d11va (hardware)`, `vaapi (hardware)`, or `software`.
+      render: text
+
+  - type: textarea
+    id: media
+    attributes:
+      label: The file or stream
+      description: Container, codecs, resolution, HDR. `ffprobe` or `mediainfo` output helps. Do not upload copyrighted media.
+      render: text
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log
+      description: |
+        Start with `vihpluh --log-level debug`, reproduce the problem, quit, and paste the relevant part of `vihpluh.log`:
+        Windows `%LOCALAPPDATA%\vihpluh\logs\`, Linux `~/.local/state/vihpluh/` (portable: `data/logs/` beside the executable).
+        Logs at debug level contain file paths, so edit out anything private.
+      render: text
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Changed settings
+      description: Your `config.toml` (and `keybinds.toml` if input is involved). It holds only what you changed.
+      render: toml
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: On Fedora, I followed the RPM Fusion codec steps (or the problem is not codec-related).

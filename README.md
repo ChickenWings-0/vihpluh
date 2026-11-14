@@ -122,7 +122,8 @@ vihpluh ships sensible defaults and stores only what you change, outside the rep
 | Thumbnail / waveform cache | `%LOCALAPPDATA%\vihpluh\cache\` | `~/.cache/vihpluh/` |
 
 Run with `--home <dir>` (or drop a file named `portable` next to the executable) to keep everything in one folder.
-Every setting, action, and default shortcut is documented in [KEYBINDS_AND_CONFIG](docs/KEYBINDS_AND_CONFIG.md).
+How to use each feature is in the [User Guide](docs/USER_GUIDE.md); every setting, action, and default shortcut is
+documented in [KEYBINDS_AND_CONFIG](docs/KEYBINDS_AND_CONFIG.md).
 
 A few defaults to get started: `Space` play/pause · `←` `→` seek · `F` fullscreen · `Z` Zen mode · `Q` queue ·
 `\` sidebar · `Ctrl+L` library · `Ctrl+B` bookmark · `G` / `H` subtitle delay · `F1` all shortcuts.
@@ -131,6 +132,10 @@ A few defaults to get started: `Space` play/pause · `←` `→` seek · `F` ful
 
 | Document | Contents |
 |---|---|
+| [USER_GUIDE](docs/USER_GUIDE.md) | Installation and portable mode, file locations, command line, queue and resume, subtitles, presets, equalizer, shaders, library and IPTV, keybindings |
+| [CONTRIBUTING](CONTRIBUTING.md) | Toolchain setup on Windows and Fedora, scripts, architecture invariants, adding actions / settings / IPC commands, verification gates, commit style |
+| [CHANGELOG](CHANGELOG.md) | What each version added and its known limitations |
+| [SECURITY](SECURITY.md) | Privacy and network model, hardening, how to report a vulnerability |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | Stack decision, process model, video pipelines and hardware-decode chains, IPC contract, storage schemas, presets, dependencies |
 | [DESIGN_SYSTEM](docs/DESIGN_SYSTEM.md) | Colour and type tokens, geometry, icons, layout metrics, component and panel specs, motion, accessibility |
 | [KEYBINDS_AND_CONFIG](docs/KEYBINDS_AND_CONFIG.md) | Action registry, default shortcuts, key notation, hotkey editor, every setting with its label and default |

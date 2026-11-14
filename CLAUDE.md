@@ -46,6 +46,10 @@ hands-on checks in their notes, and Phase 11 records three missed performance bu
 | [`docs/KEYBINDS_AND_CONFIG.md`](docs/KEYBINDS_AND_CONFIG.md) | adding a setting, an action, or a shortcut. Source of truth for config keys and action IDs. |
 | [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) | deciding what to build next and how to prove it works. |
 | [`README.md`](README.md) | public-facing overview and build instructions. Keep it accurate as features land. |
+| [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | changing anything a user sees or types: CLI flags, paths, presets, keybinds, workflows. Keep it matching the code. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | setting up a toolchain, or explaining to a contributor how to add an action, setting, or IPC command. |
+| [`CHANGELOG.md`](CHANGELOG.md) | a user-visible change lands: add it under the unreleased version. |
+| [`SECURITY.md`](SECURITY.md) | touching network access, the CSP, IPC capabilities, or what is stored on disk. |
 
 If code and a doc disagree, that is a bug: fix whichever is wrong **in the same change**. A decision
 that deviates from a doc must update the doc and add a row to the decision log in `ARCHITECTURE.md` §15.

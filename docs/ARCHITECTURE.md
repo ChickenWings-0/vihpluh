@@ -107,9 +107,11 @@ Target tree. Create directories only as their phase needs them.
 
 ```
 vihpluh/
-├── CLAUDE.md  README.md  LICENSE  .gitignore  .gitattributes
+├── CLAUDE.md  README.md  CONTRIBUTING.md  CHANGELOG.md  SECURITY.md  LICENSE  THIRD_PARTY_NOTICES.md
+├── .gitignore  .gitattributes
+├── .github/                      # workflows/ (ci, release), ISSUE_TEMPLATE/ (bug, feature), release-notes.md
 ├── docs/
-│   ├── ARCHITECTURE.md  DESIGN_SYSTEM.md  IMPLEMENTATION_PLAN.md  KEYBINDS_AND_CONFIG.md
+│   ├── ARCHITECTURE.md  DESIGN_SYSTEM.md  IMPLEMENTATION_PLAN.md  KEYBINDS_AND_CONFIG.md  USER_GUIDE.md
 ├── package.json  pnpm-lock.yaml  vite.config.ts  tsconfig.json  biome.json  index.html
 ├── scripts/
 │   ├── fetch-libmpv.ps1          # Windows: download + verify pinned libmpv, generate mpv.lib

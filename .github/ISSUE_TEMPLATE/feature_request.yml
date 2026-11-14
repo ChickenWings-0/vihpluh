@@ -1,0 +1,68 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        vihpluh is a personal, zero-bloat player with a deliberately narrow scope: no accounts, telemetry,
+        onboarding, or update prompts, and no network traffic unless a stream is opened. Requests that fit
+        that scope are the most likely to land.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+      placeholder: "When I watch a series with long openings, I skip them by hand every episode…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: How it could work, ideally as an action with a shortcut, a setting, or a sidebar control.
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround
+      description: For example a `[[custom]]` binding, a preset, or an `[mpv.options]` entry.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Playback
+        - Queue / session
+        - Subtitles
+        - Audio / equalizer
+        - Video / HDR / shaders
+        - Presets
+        - Library / playlists / streams
+        - Settings / keybindings
+        - Window / picture-in-picture
+        - Packaging / build
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platforms
+    attributes:
+      label: Platforms it matters on
+      multiple: true
+      options:
+        - Windows
+        - Linux (Wayland)
+        - Linux (X11)
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Other players
+      description: If another player does this well, how does it behave there?
