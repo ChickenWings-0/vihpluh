@@ -4,8 +4,9 @@ How to install, run, and get the most out of vihpluh. Every shortcut below is th
 `vihpluh` keymap; all of them can be changed (see [Customization](#9-customization-and-keybindings)).
 The complete list of actions, shortcuts, and settings is in [KEYBINDS_AND_CONFIG](KEYBINDS_AND_CONFIG.md).
 
-> **Platform status.** Everything here has been exercised on Windows 11. The Linux build has not
-> been run yet; Linux paths and behaviour below describe the intended design.
+> **Platform status.** Version 0.1.0 is released for Windows, and everything here has been exercised
+> on Windows 11. On Linux the app builds and its tests pass, but the video backend is not finished and
+> it has not been run on a desktop yet; Linux paths and behaviour below describe the intended design.
 
 ## Contents
 
@@ -26,6 +27,8 @@ The complete list of actions, shortcuts, and settings is in [KEYBINDS_AND_CONFIG
 
 ### 1.1 Windows
 
+Download either package from [GitHub Releases](https://github.com/ChickenWings-0/vihpluh/releases/latest).
+
 | Package | What it does |
 |---|---|
 | `vihpluh_<version>_x64-setup.exe` | Per-user installer (no administrator rights). Installs `vihpluh.exe` with `libmpv-2.dll` beside it and registers "Open with" for common video, audio, and playlist types. |
@@ -36,6 +39,8 @@ The WebView2 runtime is part of Windows 11 and Windows 10 1803+. If it is missin
 
 ### 1.2 Fedora
 
+There is no prebuilt RPM on the releases page yet: build one from source with `pnpm tauri build`
+(steps in the [README](../README.md#fedora)). Installing it with
 `sudo dnf install ./vihpluh-<version>.x86_64.rpm` pulls in `mpv-libs`, `webkit2gtk4.1`, `gtk3`, and
 `libepoxy`. Stock Fedora cannot decode HEVC: enable [RPM Fusion](https://rpmfusion.org/Configuration)
 and follow the codec steps in the [README](../README.md#fedora). `scripts/check-deps.sh --runtime`

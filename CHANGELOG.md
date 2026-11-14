@@ -4,11 +4,22 @@ All notable changes to vihpluh are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] — Unreleased
+## [Unreleased]
 
-The first version. Built and exercised on Windows 11. The Linux build (Fedora, Wayland and X11) is
-written up to its render backend, which waits on spike S2 on bare-metal Fedora. Open checks are
-listed in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
+### Fixed
+- Windows builds in GitHub Actions: `pnpm fetch:libmpv` and `pnpm package:portable` no longer stop
+  with "Get-FileHash is not recognized" when started from PowerShell 7. SHA-256 and the zip are now
+  made through .NET directly, so neither script depends on a PowerShell module.
+- The portable zip stores its entries with `/` separators, so unzip tools other than Windows Explorer
+  extract it into a folder instead of into file names containing `\`.
+- Two Rust tests no longer assume Windows paths or a desktop user folder, so the suite passes in the
+  Fedora CI container.
+
+## [0.1.0] — 2026-11-14
+
+The first version. Built and exercised on Windows 11; the installer and the portable zip are on the
+releases page. The Linux build (Fedora, Wayland and X11) compiles, but its video render backend is
+still a placeholder, so nothing has been played on Fedora yet.
 
 ### Added
 
@@ -102,19 +113,21 @@ listed in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 #### Packaging and project
 - Windows per-user NSIS installer with file associations, and a portable zip (`portable` marker keeps
   all data beside the executable).
-- Fedora RPM configuration with runtime dependencies and desktop MIME types (not yet built).
+- Fedora RPM configuration with runtime dependencies and desktop MIME types (built by the release
+  workflow; not yet installed on a Fedora desktop or attached to a release).
 - GitHub Actions CI (Windows and Fedora: fmt, clippy, tests, `pnpm check`, build) and a tag-driven
-  draft release workflow (not yet run).
+  draft release workflow.
 - `THIRD_PARTY_NOTICES.md` generated from the Rust and npm dependency trees.
-- Documentation: architecture, design system, keybinds and configuration, implementation plan, user
-  guide, contributing guide, security policy.
+- Documentation: keybinds and configuration reference, user guide, contributing guide, security policy.
 
 ### Known limitations
-- Linux: the video render backend is a placeholder until spike S2. Nothing has been run on Fedora.
-- Performance budgets missed on Windows (ARCHITECTURE §14): first frame under load (0.9–1.8 s vs 0.9 s),
+- Linux: the video render backend is a placeholder; it needs a bare-metal Fedora machine to finish.
+  Nothing has been played on Fedora.
+- Performance targets missed on Windows: first frame under load (0.9–1.8 s vs 0.9 s),
   memory while playing 4K (~740 MB vs 450 MB, mostly the webview), and background connections made by the
   WebView2 runtime itself.
 - Snap Layouts are not offered on the custom maximize button (use native decorations).
 - HDR passthrough with an HDR display, multi-monitor behaviour, and screen-reader use are not yet verified.
 
+[Unreleased]: https://github.com/ChickenWings-0/vihpluh/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/ChickenWings-0/vihpluh/releases/tag/v0.1.0

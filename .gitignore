@@ -25,3 +25,9 @@ desktop.ini
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# --- Internal planning and agent guidance (kept on the owner's disk, not published) ---
+/CLAUDE.md
+/docs/IMPLEMENTATION_PLAN.md
+/docs/ARCHITECTURE.md
+/docs/DESIGN_SYSTEM.md

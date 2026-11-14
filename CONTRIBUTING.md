@@ -2,21 +2,20 @@
 
 vihpluh is a personal, keyboard-driven media player. It is public so others can build it, learn from
 it, or send fixes. Small, focused changes are the easiest to review. Open an issue before starting
-anything large, because the stack and the scope are deliberately fixed (see
-[ARCHITECTURE §1–2](docs/ARCHITECTURE.md#1-goals-and-non-goals)).
+anything large, because the stack and the scope are deliberately fixed: Tauri 2, a Rust core, libmpv,
+and a React + TypeScript + Tailwind interface, with no telemetry, accounts, onboarding, or
+auto-update — and no second UI framework, component kit with its own look, CSS-in-JS runtime, or ORM.
 
 Read these before touching an area:
 
 | Document | When |
 |---|---|
-| [ARCHITECTURE](docs/ARCHITECTURE.md) | Rust core, mpv, video surfaces, IPC, storage, build. The source of truth for contracts and schemas. |
-| [DESIGN_SYSTEM](docs/DESIGN_SYSTEM.md) | Any UI: tokens, geometry, components, motion. |
 | [KEYBINDS_AND_CONFIG](docs/KEYBINDS_AND_CONFIG.md) | Adding an action, shortcut, or setting. The source of truth for action IDs and config keys. |
-| [IMPLEMENTATION_PLAN](docs/IMPLEMENTATION_PLAN.md) | What is done, what is open, and how each item is verified. |
+| [USER_GUIDE](docs/USER_GUIDE.md) | Changing anything a user sees or types: command-line flags, paths, presets, workflows. |
+| [CHANGELOG](CHANGELOG.md) | A user-visible change lands: add it under the unreleased version. |
+| [SECURITY](SECURITY.md) | Touching network access, the CSP, IPC capabilities, or what is stored on disk. |
 
-If code and a document disagree, that is a bug: fix whichever is wrong **in the same change**. A
-decision that departs from a document updates it and adds a row to the decision log
-(ARCHITECTURE §15).
+If code and a document disagree, that is a bug: fix whichever is wrong **in the same change**.
 
 ---
 
@@ -97,8 +96,10 @@ sudo dnf install libva-utils vulkan-tools       # vainfo, vulkaninfo
 scripts/check-deps.sh --runtime
 ```
 
-> The Linux render backend (`src-tauri/src/video/render_gtk.rs`) is still a placeholder until spike
-> S2 runs on bare-metal Fedora. See IMPLEMENTATION_PLAN §3.
+> The Linux render backend (`src-tauri/src/video/render_gtk.rs`) is still a placeholder: it builds
+> and the tests pass in CI, but it shows no video yet. Getting libmpv's render API to draw into a
+> `GtkGLArea` under the transparent WebKitGTK webview needs a bare-metal Fedora machine (a container
+> or VM is not a fair test of the GL interop). Help here is welcome.
 
 ### 1.4 Development data never touches your own config
 
@@ -127,8 +128,10 @@ config, presets, playlists, databases, caches, or media names.
 | `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` | Lint Rust. |
 | `cargo test --manifest-path src-tauri/Cargo.toml` | Rust tests. |
 
-Rust tests live in the library's unit-test modules, not in `src-tauri/tests/` (a separate integration
-test binary cannot start; ARCHITECTURE D17).
+Rust tests live in the library's unit-test modules, not in `src-tauri/tests/`: a separate test
+executable lacks the app manifest, and on Windows it dies at load (`STATUS_ENTRYPOINT_NOT_FOUND`)
+because Tauri's imports need Common Controls v6. For the same reason, code that unit tests exercise
+announces events through a plain callback rather than reaching Tauri's emitter.
 
 ---
 
@@ -260,7 +263,8 @@ The test checks that every Rust key has a schema entry and vice versa, that ever
    (`export const thingDo = (id: number) => invoke<ThingResult>("thing_do", { id });`) or to
    `src/ipc/events.ts` (`listen<Payload>("thing://changed", handler)`). Components import only these
    wrappers.
-6. **Document** the command or event in ARCHITECTURE §7.3 / §7.4.
+6. **Capability.** Commands are reachable only if they are allowed for the main window in
+   `src-tauri/capabilities/`; keep the surface narrow (see [SECURITY](SECURITY.md#hardening)).
 
 ---
 
@@ -279,12 +283,15 @@ pnpm check
 
 1. The gates above pass.
 2. The behaviour was exercised in the running app (`pnpm tauri dev`), not just compiled. Anything touching
-   playback is tested with a real file (the test-media list is in IMPLEMENTATION_PLAN §2; the files
-   themselves are not in the repo).
+   playback is tested with real files covering what it touches — for example 4K HEVC HDR10 with several
+   audio and subtitle tracks, AV1, a baseline 1080p H.264 MP4, styled ASS subtitles, bitmap (PGS)
+   subtitles, a season folder with external subtitles, and a tagged FLAC album. Keep them in
+   `test-media/` (gitignored); media never enters the repo.
 3. A new action, setting, or shortcut is in its schema **and** in KEYBINDS_AND_CONFIG.
 4. Platform-sensitive changes (video surface, window, hwdec, paths) say in the commit body which of
    Windows / Fedora-Wayland / Fedora-X11 were actually tested. Untested platforms are named as untested.
-5. A checkbox in IMPLEMENTATION_PLAN is ticked only when its verification was observed.
+5. A user-visible change has a line in [CHANGELOG](CHANGELOG.md), and the README / User Guide still
+   match the code.
 
 ### 5.3 Commit messages
 
@@ -310,4 +317,11 @@ and do not add generated-by or co-author trailers.
 
 Source code is MIT ([LICENSE](LICENSE)). By contributing you agree that your contribution is released
 under the same licence. Windows binaries bundle a GPL libmpv build and are distributed under GPL-3.0-or-later.
-See [ARCHITECTURE §13](docs/ARCHITECTURE.md#13-packaging-licensing-security).
+
+Why the split: libmpv is LGPL only when built without its GPL parts, and the pinned Windows build
+(shinchiro/mpv-winbuild-cmake, pinned with its SHA-256 in `scripts/fetch-libmpv.ps1`) enables FFmpeg's
+GPL code. The repository contains no mpv code, so the source stays MIT; a binary that ships
+`libmpv-2.dll` takes on GPL terms, and the release notes link the corresponding sources. The Fedora
+package uses the system `mpv-libs` and bundles nothing. One crate compiled into the executable,
+`libmpv2-sys`, is LGPL-2.1; the public source and build steps satisfy its relinking clause. Never add
+mpv or FFmpeg source to this repository. After changing dependencies, run `pnpm gen:notices`.

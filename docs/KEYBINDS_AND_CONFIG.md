@@ -3,7 +3,7 @@
 Source of truth for every **action**, every **default shortcut**, and every **setting**. If it is not in this
 document it does not exist; adding one means adding it here in the same change.
 
-Related: IPC and storage → [ARCHITECTURE](ARCHITECTURE.md); how settings and the hotkey editor look → [DESIGN_SYSTEM](DESIGN_SYSTEM.md) §11.2.
+Related: how to use these in practice → [User Guide](USER_GUIDE.md) (§9 covers customization and the hotkey editor); how to add an action or setting → [CONTRIBUTING](../CONTRIBUTING.md#4-how-to).
 
 ## Contents
 
@@ -31,7 +31,7 @@ Related: IPC and storage → [ARCHITECTURE](ARCHITECTURE.md); how settings and t
   command palette all dispatch the same action ID. Actions take no free-form arguments from the UI; step sizes come from config.
 - **Shortcuts** bind key strings to action IDs, per **context**.
 - **Settings** are typed keys grouped into ten categories. The settings UI is generated from one schema; the file on disk holds only what the user changed.
-- User files live in the OS config directory (ARCHITECTURE §9.1), never in the repo. Both files are watched: saving an edit in a text editor applies it live.
+- User files live in the OS config directory ([User Guide §1.3](USER_GUIDE.md#13-where-vihpluh-keeps-its-files)), never in the repo. Both files are watched: saving an edit in a text editor applies it live.
 - Files carry `schema = 1`. Unknown keys are preserved and reported once in the log (never deleted); invalid values fall back to the default and raise a toast naming the key.
 
 ---
@@ -215,7 +215,7 @@ Rules:
 3. If a control has keyboard focus (`:focus-visible`), its native keys (`Space`, `Enter`, arrows, `Home`/`End`) are left to it.
 4. Look up the binding in the **active context** (`queue`, `library`, `bookmarks`, `settings`), then in `global`. First hit wins.
 5. Check the action's `isEnabled()`; if disabled, do nothing (no OSD, no beep).
-6. Dispatch. If chrome is hidden, show the OSD flash for the action (DESIGN_SYSTEM §8.9).
+6. Dispatch. If chrome is hidden, show the on-screen (OSD) flash for the action.
 
 ### 3.3 `keybinds.toml` format
 
@@ -402,7 +402,7 @@ The **Presets** manager (list, enable/disable, edit match rule, delete, reveal f
 
 | Key | Type | Default | Label | Tooltip | mpv |
 |---|---|---|---|---|---|
-| `video.hwdec` | enum(`auto`\|`off`) or string | `auto` | Hardware decoding | Uses your graphics card to decode video. Turn off only to troubleshoot. A custom mpv value can be typed in the config file. | `hwdec` (ARCHITECTURE §5.4) |
+| `video.hwdec` | enum(`auto`\|`off`) or string | `auto` | Hardware decoding | Uses your graphics card to decode video. Turn off only to troubleshoot. A custom mpv value can be typed in the config file. | `hwdec` |
 | `video.gpu_api` ⟳ | enum(`auto`\|`d3d11`\|`vulkan`\|`opengl`) | `auto` | Graphics API (Windows) | Auto uses Direct3D 11, the most reliable choice with HDR. | `gpu-api` |
 | `video.quality` | enum(`fast`\|`balanced`\|`high`) | `balanced` | Scaling quality | High looks sharper when upscaling but needs a stronger graphics card. | `profile=fast` / default / `profile=high-quality` |
 | `video.tone_mapping` | string | `auto` | HDR tone mapping | How HDR video is fitted to a non-HDR screen. Auto picks a good curve. | `tone-mapping` |

@@ -5,7 +5,7 @@ describes what it does and does not do with your data and the network, and how t
 
 ## Supported versions
 
-Only the latest release (and `main`) receives fixes. Before `0.1.0` is tagged, that means `main`.
+Only the latest release (currently `0.1.0`) and `main` receive fixes.
 
 ## Privacy model
 
@@ -36,8 +36,8 @@ Requests for streams and lists go through mpv's network stack with your `network
 vihpluh starts WebView2 with background networking, component updates, reliability reports, and pings
 switched off. Even so, on Windows the WebView2 runtime's own processes were seen opening a few
 connections to Microsoft addresses and secure-DNS probes with no stream open. vihpluh's own process
-had none. This belongs to the runtime, not vihpluh, and is tracked in
-[IMPLEMENTATION_PLAN §13](docs/IMPLEMENTATION_PLAN.md) (Phase 11 notes).
+had none. This belongs to the runtime, not vihpluh, and is listed among the known limitations in the
+[changelog](CHANGELOG.md#known-limitations).
 
 ## Hardening
 

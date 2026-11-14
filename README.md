@@ -3,9 +3,10 @@
 A fast, keyboard-driven desktop media player: **mpv's playback engine** under a compact, modern interface
 inspired by [Juxtopposed's VLC redesign](https://youtu.be/ERFeOgqk324). Built for Windows 10/11 and Fedora Linux (Wayland and X11).
 
-> **Status: 0.1.0, in testing.** Every feature below is built and has been exercised on Windows 11.
-> The Linux build has not been run yet — treat the Fedora instructions as the intended workflow
-> until that line changes. Progress and open checks are in the [implementation plan](docs/IMPLEMENTATION_PLAN.md).
+> **Status: 0.1.0, released for Windows.** Every feature below is built and has been exercised on Windows 11.
+> On Fedora the app compiles and its tests pass in CI, but the Linux video backend is still a placeholder
+> and the app has not been run on a Linux desktop yet — treat the Fedora instructions as the intended
+> workflow until that line changes. Known gaps are listed in the [changelog](CHANGELOG.md#known-limitations).
 
 ![vihpluh playing a video, with the subtitle panel open (dark theme)](docs/screenshots/dark.png)
 
@@ -31,6 +32,19 @@ network traffic unless you open a stream. It's public so anyone who finds it use
 - **Readable settings** — ten flat, searchable categories in plain English, plus a visual hotkey editor with VLC-style and mpv-style keymaps. Everything is stored in clean TOML you can edit by hand.
 - **Picture-in-picture** (`Ctrl+P`), a command palette (`Ctrl+Shift+P`), light and dark themes, and any accent colour you like.
 
+## Download & install
+
+Get the latest build from **[GitHub Releases](https://github.com/ChickenWings-0/vihpluh/releases/latest)**:
+
+| Download | For |
+|---|---|
+| [`vihpluh_0.1.0_x64-setup.exe`](https://github.com/ChickenWings-0/vihpluh/releases/latest/download/vihpluh_0.1.0_x64-setup.exe) | **Windows installer** (10 / 11, x64). Installs for the current user, no administrator rights needed, and adds "Open with" for common video, audio, and playlist types. |
+| [`vihpluh-0.1.0-windows-x64-portable.zip`](https://github.com/ChickenWings-0/vihpluh/releases/latest/download/vihpluh-0.1.0-windows-x64-portable.zip) | **Windows portable** (10 / 11, x64). Unzip anywhere, even a USB stick; settings, library, and cache stay in a `data` folder beside the executable. |
+
+The WebView2 runtime is part of Windows 11 and Windows 10 1803+; if it is missing,
+`winget install --id Microsoft.EdgeWebView2Runtime`. Fedora has no prebuilt package yet: build it
+from source as below. Installation details are in the [User Guide](docs/USER_GUIDE.md#1-installation-and-portable-mode).
+
 ## Stack
 
 | | |
@@ -41,11 +55,13 @@ network traffic unless you open a stream. It's public so anyone who finds it use
 | Interface | TypeScript, React, Tailwind CSS |
 | Data | TOML config / presets, JSON playlists, SQLite library |
 
-The reasoning, including the alternatives considered, is in [ARCHITECTURE §2](docs/ARCHITECTURE.md#2-stack-decision).
+Why this stack: on Windows, libmpv gets a native D3D11 child window under a transparent webview, so
+mpv keeps its best renderer, zero-copy hardware decoding, and HDR passthrough while the interface stays
+fully custom HTML and CSS. On Linux, where a foreign window cannot be embedded under the webview (and
+not at all on Wayland), mpv renders through its render API into a GL area instead. Both video paths sit
+behind one trait, so the rest of the app cannot tell them apart.
 
-## Building
-
-Releases, when published, carry a Windows installer, a portable zip, and a Fedora RPM. To build from source:
+## Building from source
 
 ### Windows 10 / 11
 
@@ -68,7 +84,7 @@ pnpm package:portable    # portable zip in src-tauri/target/release/bundle/porta
 
 No administrator rights for the Visual Studio Build Tools? The GNU Rust toolchain works too:
 `rustup toolchain install stable-x86_64-pc-windows-gnu` plus a MinGW-w64 GCC on `PATH`
-(for example MSYS2's `mingw-w64-x86_64-gcc`). Details: [ARCHITECTURE §12.1](docs/ARCHITECTURE.md#121-windows-10--11-x64).
+(for example MSYS2's `mingw-w64-x86_64-gcc`). Details: [CONTRIBUTING §1.2](CONTRIBUTING.md#12-windows--gnu-toolchain-no-administrator-rights).
 
 ### Fedora
 
@@ -97,7 +113,7 @@ sudo dnf install intel-media-driver             # Intel
 sudo dnf install akmod-nvidia xorg-x11-drv-nvidia-cuda   # NVIDIA
 ```
 
-`scripts/check-deps.sh` reports anything missing. Full dependency details: [ARCHITECTURE §12](docs/ARCHITECTURE.md#12-build-and-runtime-dependencies).
+`scripts/check-deps.sh` reports anything missing. Full setup details: [CONTRIBUTING §1](CONTRIBUTING.md#1-setting-up).
 
 ## Troubleshooting
 
@@ -136,10 +152,7 @@ A few defaults to get started: `Space` play/pause · `←` `→` seek · `F` ful
 | [CONTRIBUTING](CONTRIBUTING.md) | Toolchain setup on Windows and Fedora, scripts, architecture invariants, adding actions / settings / IPC commands, verification gates, commit style |
 | [CHANGELOG](CHANGELOG.md) | What each version added and its known limitations |
 | [SECURITY](SECURITY.md) | Privacy and network model, hardening, how to report a vulnerability |
-| [ARCHITECTURE](docs/ARCHITECTURE.md) | Stack decision, process model, video pipelines and hardware-decode chains, IPC contract, storage schemas, presets, dependencies |
-| [DESIGN_SYSTEM](docs/DESIGN_SYSTEM.md) | Colour and type tokens, geometry, icons, layout metrics, component and panel specs, motion, accessibility |
 | [KEYBINDS_AND_CONFIG](docs/KEYBINDS_AND_CONFIG.md) | Action registry, default shortcuts, key notation, hotkey editor, every setting with its label and default |
-| [IMPLEMENTATION_PLAN](docs/IMPLEMENTATION_PLAN.md) | Twelve phases with task checklists and verification criteria |
 
 ## Credits
 
@@ -154,5 +167,10 @@ Source code: [MIT](LICENSE).
 Windows binaries (installer and portable zip) bundle a libmpv build that includes GPL-licensed parts of
 mpv and FFmpeg, so those binaries are distributed under the **GNU GPL, version 3 or later**. The Fedora
 package bundles no playback code. Every bundled component is listed in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); the reasoning is in
-[ARCHITECTURE §13](docs/ARCHITECTURE.md#13-packaging-licensing-security).
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Why: libmpv is LGPL only when built without its GPL parts, and the pinned Windows build
+([shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake)) configures FFmpeg
+with `--enable-gpl --enable-version3` and keeps mpv's GPL code. The repository itself contains no mpv
+code, so the source stays MIT; only a binary that ships the DLL takes on GPL terms. On Linux the system
+`mpv-libs` is used and nothing is bundled.
