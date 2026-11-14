@@ -277,7 +277,15 @@ mod tests {
         .unwrap();
         assert_eq!(paths.default_screenshot_dir(), PathBuf::from("/repo/.local/screenshots"));
         let os = from_os(os_dirs().unwrap());
-        assert!(os.default_screenshot_dir().ends_with(APP_DIR));
+        let shots = os.default_screenshot_dir();
+        // Pictures/vihpluh normally; a headless system (CI containers) has no Pictures folder
+        // and falls back to the data dir, which is itself inside a `vihpluh` folder.
+        assert!(
+            shots.ends_with(APP_DIR) || shots == os.data.join("screenshots"),
+            "unexpected screenshot dir {}",
+            shots.display()
+        );
+        assert!(shots.components().any(|c| c.as_os_str() == APP_DIR));
     }
 
     #[test]

@@ -351,16 +351,23 @@ mod tests {
 
     #[test]
     fn m3u_round_trip_keeps_source_and_title() {
+        // A drive-letter path is only absolute on Windows; elsewhere it would be joined onto `base`.
+        let dir = if cfg!(windows) { "E:/Music" } else { "/music" };
         let list = playlist(
             "p",
             vec![
-                item("E:/Music/01 My Foolish Heart.flac", "My Foolish Heart", None, Some(298.0)),
+                item(
+                    &format!("{dir}/01 My Foolish Heart.flac"),
+                    "My Foolish Heart",
+                    None,
+                    Some(298.0),
+                ),
                 item("https://example.com/stream.m3u8", "Radio, live", None, None),
             ],
         );
         let text = to_m3u(&list);
         assert!(text.starts_with("#EXTM3U\n#EXTINF:298,My Foolish Heart\n"));
-        let back = parse_m3u(&text, Path::new("E:/Music"));
+        let back = parse_m3u(&text, Path::new(dir));
         let pairs = |items: &[PlaylistItem]| {
             items
                 .iter()
