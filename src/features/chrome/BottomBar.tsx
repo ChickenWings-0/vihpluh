@@ -24,7 +24,9 @@ import { MuteButton, VolumeCone } from "./VolumeCone";
 function Elapsed() {
   const el = useRef<HTMLSpanElement>(null);
   useAnimationFrame(() => {
-    if (el.current) el.current.textContent = formatTime(getPosition());
+    // Only on change: writing the same text still repaints, every frame, even while paused.
+    const text = formatTime(getPosition());
+    if (el.current && el.current.textContent !== text) el.current.textContent = text;
   });
   return (
     <span
@@ -42,8 +44,8 @@ function TotalOrRemaining() {
   useAnimationFrame(() => {
     if (!el.current) return;
     const dur = getDuration();
-    el.current.textContent =
-      mode === "remaining" ? `−${formatTime(dur - getPosition())}` : formatTime(dur);
+    const text = mode === "remaining" ? `−${formatTime(dur - getPosition())}` : formatTime(dur);
+    if (el.current.textContent !== text) el.current.textContent = text;
   });
   return (
     <button

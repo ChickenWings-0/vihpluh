@@ -257,6 +257,7 @@ impl Player {
                 software_notice_shown: false,
                 inhibitor: Inhibitor::new(),
                 media: None,
+                taskbar_playing: None,
                 queue,
                 queue_snapshot: queue_snapshot.clone(),
                 queue_rev: u64::MAX,
@@ -616,6 +617,16 @@ impl Player {
         self.send(CoreMsg::ConfigChanged(config));
     }
 
+    /// The shape of the picture on screen (width / height), when there is one.
+    pub fn video_aspect(&self) -> Option<f64> {
+        self.mpv()?.get_string("video-out-params/aspect")?.parse().ok()
+    }
+
+    /// A transport request from outside the window (taskbar buttons, media keys).
+    pub fn media_command(&self, command: MediaCommand) {
+        self.send(CoreMsg::Media(command));
+    }
+
     /// Reads an mpv property as text. Development builds only (verification tooling).
     #[cfg(debug_assertions)]
     pub fn debug_property(&self, name: &str) -> Option<String> {
@@ -723,6 +734,8 @@ struct Core {
     software_notice_shown: bool,
     inhibitor: Inhibitor,
     media: Option<MediaSession>,
+    /// What the taskbar's Play/Pause button was last told.
+    taskbar_playing: Option<bool>,
     queue: Queue,
     queue_snapshot: Arc<RwLock<QueueState>>,
     /// The queue revision last emitted.
@@ -1035,6 +1048,15 @@ impl Core {
         self.refresh_preset_dirty();
         let state = &self.mirror.state;
         self.inhibitor.set(power::required(state.status, state.media.as_ref().map(|m| m.kind)));
+        let playing = state.status == Status::Playing;
+        if self.taskbar_playing != Some(playing) {
+            self.taskbar_playing = Some(playing);
+            if let Some(app) = self.app.get() {
+                // The taskbar buttons belong to the window's thread.
+                let _ =
+                    app.run_on_main_thread(move || crate::platform::taskbar::set_playing(playing));
+            }
+        }
         if let Some(media) = &mut self.media {
             media.update(&NowPlaying {
                 title: state.media.as_ref().map(|m| m.title.clone()),

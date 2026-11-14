@@ -48,6 +48,7 @@ function animateMargin(target: number, reduceMotion: boolean) {
 export function useDockLayout() {
   const dock = useUiStore((s) => s.dock);
   const zen = useUiStore((s) => s.zen);
+  const pip = useUiStore((s) => s.window.mode === "pip");
   const fullscreen = useUiStore((s) => s.window.mode === "fullscreen");
   const dragWidth = useUiStore((s) => s.dockDragWidth);
   const mode = useConfig((c) => c.interface.sidebar_mode) ?? "auto";
@@ -55,7 +56,8 @@ export function useDockLayout() {
   const windowWidth = useWindowWidth();
   const width = Math.min(dragWidth ?? configured, Math.max(0, windowWidth - 160));
   const overlay = mode === "overlay" || (mode === "auto" && fullscreen) || windowWidth < 560;
-  return { dock: zen ? null : dock, width, overlay, windowWidth };
+  // Zen and picture-in-picture show the picture alone (the dock keeps its state).
+  return { dock: zen || pip ? null : dock, width, overlay, windowWidth };
 }
 
 export function Dock() {

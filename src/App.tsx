@@ -21,6 +21,7 @@ import { LibraryDrawer, LibraryScrim } from "./features/library/LibraryDrawer";
 import { PromptDialog } from "./features/library/PromptDialog";
 import { CommandPalette } from "./features/overlays/CommandPalette";
 import { ShortcutsSheet } from "./features/overlays/ShortcutsSheet";
+import { PipChrome } from "./features/pip/PipChrome";
 import { SettingsOverlay } from "./features/settings/SettingsOverlay";
 import { appReady } from "./ipc/commands";
 import { useAppStore } from "./stores/app";
@@ -34,6 +35,7 @@ export function App() {
   const info = useAppStore((s) => s.info);
   const cursorHidden = useUiStore((s) => s.cursorHidden);
   const zen = useUiStore((s) => s.zen);
+  const pip = useUiStore((s) => s.window.mode === "pip");
 
   useEffect(() => startSync(), []);
   useKeyboard();
@@ -62,15 +64,15 @@ export function App() {
       >
         <InteractionLayer />
         <IdleScreen />
-        {import.meta.env.DEV && !zen && <DebugOverlay info={info} />}
+        {import.meta.env.DEV && !zen && !pip && <DebugOverlay info={info} />}
         <OsdFlash />
-        <Chrome />
+        {pip ? <PipChrome /> : <Chrome />}
         <LibraryScrim />
         <Dock />
         <LibraryDrawer />
-        <SettingsOverlay />
-        <ShortcutsSheet />
-        <CommandPalette />
+        {!pip && <SettingsOverlay />}
+        {!pip && <ShortcutsSheet />}
+        {!pip && <CommandPalette />}
         <PromptDialog />
         <ContextMenu />
         <Toasts />

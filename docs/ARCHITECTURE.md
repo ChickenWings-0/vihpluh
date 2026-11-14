@@ -64,7 +64,7 @@ the bare-metal Fedora machine.
 | IPC typing | **`ts-rs`** | Rust DTOs derive `TS`; bindings generated into `src/ipc/bindings/`. (`tauri-specta` rejected: still release-candidate.) |
 | Persistence | **TOML** (`toml` + `toml_edit`), **JSON** (`serde_json`), **SQLite** (`rusqlite`, bundled) | See §9. |
 | OS integration | `souvlaki` (media keys, SMTC on Windows, MPRIS on Linux), `notify` (file watching), `directories` (paths) | |
-| Tauri plugins | `single-instance`, `dialog`, `window-state`, `opener` | Nothing else without justification. |
+| Tauri plugins | `single-instance`, `dialog` | Nothing else without justification. (`window-state` and `opener` were planned and turned out not to be needed: D42, and the file manager is started directly.) |
 | Tooling | pnpm, Biome, Vitest, cargo fmt/clippy/test, GitHub Actions | |
 
 Pin exact versions in `Cargo.lock` / `pnpm-lock.yaml` when scaffolding; the majors above are the contract.
@@ -180,8 +180,9 @@ vihpluh/
         ├── subtitles/            # cues.rs (srt/ass/vtt), mkv.rs, automatch.rs
         ├── media/                # identity.rs (oshash), thumbs.rs, waveform.rs
         ├── library/              # db.rs, migrations/*.sql, scan.rs, music.rs, iptv.rs, playlists.rs
-        └── platform/             # mod.rs (trait), windows.rs, linux.rs — power inhibit,
-                                  #  media keys, decorations, session detection
+        ├── window.rs             # WindowManager: modes, PiP, window.json; window/geometry.rs
+        └── platform/             # mod.rs, windows.rs, linux.rs — power inhibit, media keys,
+                                  #  taskbar.rs (+ taskbar_win.rs: thumbnail buttons)
 ```
 
 ---
@@ -296,7 +297,7 @@ vihpluh [OPTIONS] [FILES_OR_URLS]...
   --fullscreen | --pip | --zen
   --paused              Load without starting playback
   --no-resume           Ignore saved resume position
-  --no-session          Do not restore or save the session queue
+  --no-session          Do not restore or save the session queue or the window's size and place
   --preset <ID>         Force a preset for the opened items
   --home <DIR>          Use DIR as the config/data/cache root (portable mode)
   --log-level <error|warn|info|debug|trace>
@@ -810,7 +811,9 @@ interface AppInfo {
 | `session_ui_get` | — | `UiState` (`{ sidebarOpen, sidebarTab, queueOpen, libraryOpen }`) |
 | `session_ui_set` | `Partial<UiState>` | `void` (debounced into `session.json`) |
 | `window_get_state` | — | `WindowState` (`{ mode, maximized, minimized, focused, alwaysOnTop }`) |
-| `window_set_mode` | `{ mode: "normal" \| "fullscreen" \| "pip" }` | `void` |
+| `window_set_mode` | `{ mode: "normal" \| "fullscreen" \| "pip" }` | `void`. Entering `pip` remembers the geometry and mode; `normal` from `pip` returns to both (including fullscreen or maximized). |
+| `window_pip_resize` | `{ phase: "start" \| "move" \| "end", edge: ResizeEdge, dx: number, dy: number }` (CSS px since `start`) | `void` — the window is resized keeping the picture's shape (D43) |
+| `window_pip_refit` | — | `void` — refits the PiP window to the shape of what is playing now |
 | `window_set_always_on_top` | `{ enabled: boolean }` | `void` |
 | `window_minimize` / `window_toggle_maximize` / `window_close` | — | `void` |
 | `waveform_request` | `{ mediaKey: string, trackId: number }` | `{ status: "ready" \| "running" \| "queued" \| "unavailable" \| "cancelled" \| "failed" }` |
@@ -948,7 +951,12 @@ Both carry `schema = <int>`; `config/migrate.rs` upgrades older files in place a
 (run when each store opens; schema 1 is the first, so the lists of steps are still empty).
 Writes go through `toml_edit` so user comments and ordering are preserved. Both files are watched; external edits apply live.
 
-### 9.4 `session.json`
+### 9.4 `session.json` and `window.json`
+
+`window.json` (data directory) holds the window's plain rectangle in physical pixels and whether it was
+maximized: `{ "rect": { "x", "y", "width", "height" }, "maximized" }`. It is written when the window closes
+or the app quits — in fullscreen or picture-in-picture, with the geometry the window would return to — and
+read before the window is first shown (D42).
 
 ```json
 {
@@ -1538,6 +1546,9 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | D39 | `ui.escape` closes Settings, the shortcuts sheet, or the palette *before* returning focus to the player | The overlays behave like a popover: with focus in their search field, the earlier order needed two presses to close them, and the first one appeared to do nothing. |
 | D40 | The default accent keeps the stylesheet's hand-tuned tokens; derived tokens (DESIGN_SYSTEM §2.3) are written only for a custom accent, and a `--focus-ring` token is derived with them | Deriving the default too shifted the shipped look (accent text `#FF7A1A` became `#FF6B00`). The ring was the bare accent, which a pale accent on white or a dark one on the dark theme made invisible; it now falls back to the readable accent shade when the accent has under 3:1 against the surface. |
 | D41 | The hotkey editor lists actions from the frontend's action registry, not from the resolved keymap, and each custom binding carries its position in the file | With `base = "none"` the keymap names no actions, so there would be nothing to bind. Deleting a `[[custom]]` entry by its position among the *valid* ones could remove the wrong entry when the file also holds an invalid one. |
+| D42 | The window's size and place are kept by vihpluh itself (`window.json` in the data directory), not by `tauri-plugin-window-state` | The plugin writes into the OS app-config directory whatever `--home`, `VIHPLUH_HOME`, or portable mode say, which would break "everything under one folder". Ours is one small file next to `session.json`; it is skipped with `--no-session`, never restores a position that is off every screen, and never restores a position at all where the session cannot place windows. |
+| D43 | In picture-in-picture the toolkit's free resize is switched off and the edges are dragged through `window_pip_resize`, which computes the rectangle in the core | Neither toolkit can lock a resize to an aspect ratio. Where the session cannot place windows (Wayland) the compositor's own resize is used instead and the shape is not locked. |
+| D44 | Snap Layouts on the custom maximize button are not implemented; `interface.window_decorations = "native"` is the way to get them | The flyout needs the top-level window to answer `HTMAXBUTTON` for the button's rectangle, but that area belongs to WebView2's child window, which lives in another process and cannot be subclassed. The known workarounds synthesize key presses. Win+arrow snapping and the maximize button itself are unaffected. |
 
 ### Open risks (each owned by a Phase 1 spike)
 
@@ -1547,4 +1558,4 @@ Measured on the owner's Windows machine and the Fedora reference machine; regres
 | `GtkGLArea` + render API under transparent WebKitGTK on GTK3 (Wayland + X11) | S2 — **open** (needs bare-metal Fedora; `render_gtk.rs` is a no-video placeholder until then) | No Linux video with overlay UI | §5.3 ladder → GTK4/WebKitGTK-6 shell (§4.5) → Qt re-decision. |
 | libmpv import library / DLL bundling with MSVC | S3 — **passed with the GNU toolchain**; the MSVC `mpv.lib` step is still unexercised (no MSVC on the dev machine) | Windows build friction | Runtime loading via `libloading` with hand-kept bindings. |
 | `af-command` live EQ, SW-render thumbnails, `ao=pcm` to pipe, sub option names | S4 — **passed on Windows 2026-11-12** (probes on branch `spike/s4`); Linux FIFO and render-backend margins/shader ride with S2 | Individual features degrade | Documented per-feature fallbacks in §6.6 / §11. |
-| Windows undecorated transparent window: Snap Layouts, shadow, resize borders | Phase 11 | Polish | `interface.window_decorations = "native"`; custom `WM_NCHITTEST` handling. |
+| Windows undecorated transparent window: Snap Layouts, shadow, resize borders | Phase 11 — Snap Layouts not possible on the custom button (D44) | Polish | `interface.window_decorations = "native"`; custom `WM_NCHITTEST` handling. |

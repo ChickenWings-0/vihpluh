@@ -5,11 +5,14 @@
 pub mod media;
 pub mod pipe;
 pub mod power;
+pub mod taskbar;
 
 use crate::config::Config;
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(windows)]
+mod taskbar_win;
 #[cfg(windows)]
 pub(crate) mod windows;
 
@@ -67,14 +70,15 @@ pub fn other_instance_running(identifier: &str) -> bool {
     }
 }
 
-/// Shows a window without activating it and behind every other window. Used only by
-/// development verification runs so they do not take focus from whatever the user is doing.
-/// Returns false where this is not supported.
+/// Moves a window behind every other window without activating it. Used only by
+/// development verification runs, on a window built with `focused(false)` (which the
+/// toolkit then shows without activating), so they do not get in the way of whatever the
+/// user is doing. Returns false where this is not supported.
 #[cfg(debug_assertions)]
-pub fn show_window_unobtrusively(window: &tauri::WebviewWindow) -> bool {
+pub fn send_window_to_back(window: &tauri::WebviewWindow) -> bool {
     #[cfg(windows)]
     {
-        windows::show_window_unobtrusively(window)
+        windows::send_window_to_back(window)
     }
     #[cfg(not(windows))]
     {

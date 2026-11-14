@@ -27,18 +27,16 @@ pub fn attach_parent_console() {
 }
 
 #[cfg(debug_assertions)]
-pub fn show_window_unobtrusively(window: &tauri::WebviewWindow) -> bool {
+pub fn send_window_to_back(window: &tauri::WebviewWindow) -> bool {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
-        HWND_BOTTOM, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
-        ShowWindow,
+        HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
     };
 
     let Ok(handle) = window.hwnd() else { return false };
     let handle = HWND(handle.0.cast());
     // SAFETY: `handle` is the live main window, owned by the calling (main) thread.
     unsafe {
-        let _ = ShowWindow(handle, SW_SHOWNOACTIVATE);
         let _ = SetWindowPos(
             handle,
             Some(HWND_BOTTOM),

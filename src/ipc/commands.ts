@@ -43,7 +43,7 @@ import type { VideoPatch } from "./bindings/VideoPatch";
 import type { WaveformRequestResult } from "./bindings/WaveformRequestResult";
 import type { WindowMode } from "./bindings/WindowMode";
 import type { WindowState } from "./bindings/WindowState";
-import { invoke } from "./transport";
+import { invoke, type ResizeEdge } from "./transport";
 
 // ── app ──────────────────────────────────────────────────────────────────────
 export const appInfo = () => invoke<AppInfo>("app_info");
@@ -241,6 +241,15 @@ export const keybindsRemoveCustom = (index: number) =>
 // ── window ───────────────────────────────────────────────────────────────────
 export const windowGetState = () => invoke<WindowState>("window_get_state");
 export const windowSetMode = (mode: WindowMode) => invoke<void>("window_set_mode", { mode });
+/** One step of an edge drag in picture-in-picture; `dx`/`dy` are CSS pixels since `start`. */
+export const windowPipResize = (
+  phase: "start" | "move" | "end",
+  edge: ResizeEdge,
+  dx: number,
+  dy: number,
+) => invoke<void>("window_pip_resize", { phase, edge, dx, dy });
+/** Refits the picture-in-picture window to the shape of what is playing. */
+export const windowPipRefit = () => invoke<void>("window_pip_refit");
 export const windowSetAlwaysOnTop = (enabled: boolean) =>
   invoke<void>("window_set_always_on_top", { enabled });
 export const windowMinimize = () => invoke<void>("window_minimize");

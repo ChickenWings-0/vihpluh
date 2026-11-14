@@ -195,10 +195,16 @@ export function SeekBar() {
     return Math.min(dur, Math.max(0, ((clientX - rect.left) / rect.width) * dur));
   };
 
+  const lastFrame = useRef("");
   useAnimationFrame(() => {
     const dur = getDuration();
     const pos = dragTo.current ?? getPosition();
     const frac = dur > 0 ? Math.min(1, pos / dur) : 0;
+    // Nothing moved since the last frame (paused, pointer still): touch nothing, so the
+    // webview has nothing to lay out or repaint.
+    const frame = `${frac}|${dur}|${getCacheEnd()}|${hoverX.current}|${dragTo.current}`;
+    if (frame === lastFrame.current) return;
+    lastFrame.current = frame;
     if (played.current) played.current.style.transform = `scaleX(${frac})`;
     if (playedClip.current) playedClip.current.style.clipPath = `inset(0 ${(1 - frac) * 100}% 0 0)`;
     if (thumb.current) thumb.current.style.left = `${frac * 100}%`;

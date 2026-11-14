@@ -47,7 +47,7 @@ pub struct Cli {
     #[arg(long)]
     pub no_resume: bool,
 
-    /// Do not restore or save the session queue
+    /// Do not restore or save the session queue or the window's size and place
     #[arg(long)]
     pub no_session: bool,
 

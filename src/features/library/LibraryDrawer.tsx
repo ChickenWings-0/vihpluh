@@ -612,7 +612,7 @@ function Rows({ onMenu }: { onMenu: (e: MouseEvent, row: Row) => void }) {
 /** Closes the drawer on a click outside it (rendered under the dock, over the video). */
 export function LibraryScrim() {
   const open = useUiStore((s) => s.library);
-  const zen = useUiStore((s) => s.zen);
+  const zen = useUiStore((s) => s.zen || s.window.mode === "pip");
   const setLibrary = useUiStore((s) => s.setLibrary);
   if (!open || zen) return null;
   return (

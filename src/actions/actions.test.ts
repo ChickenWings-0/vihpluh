@@ -20,9 +20,9 @@ describe("action registry", () => {
     for (const id of PARAMETERISED) expect(registered.has(id), id).toBe(true);
   });
 
-  it("disables placeholders", () => {
-    expect(getAction("window.toggle_pip")?.comingIn).toBe("Phase 11");
-    expect(isEnabled("window.toggle_pip")).toBe(false);
+  it("has no placeholder left", () => {
+    expect(allActions().filter((a) => a.comingIn)).toEqual([]);
+    expect(getAction("window.toggle_pip")?.comingIn).toBeUndefined();
     expect(isEnabled("app.quit")).toBe(true);
   });
 

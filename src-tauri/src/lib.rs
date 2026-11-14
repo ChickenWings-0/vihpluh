@@ -29,9 +29,9 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindowBuilder};
 
 use cli::Cli;
 use config::keybinds::KeybindStore;
-use config::schema::OpenBehavior;
+use config::schema::{OpenBehavior, WindowDecorations};
 use config::store::{ConfigChange, ConfigStore};
-use ipc::dto::{ConfigChanged, OpenEvent, OpenMode, OsdEvent, OsdKind};
+use ipc::dto::{ConfigChanged, MediaKind, OpenEvent, OpenMode, OsdEvent, OsdKind, Status};
 use ipc::events;
 use paths::Paths;
 use player::Player;
@@ -55,6 +55,8 @@ pub struct AppState {
     /// `None` without a database.
     pub library: Option<Arc<library::Library>>,
     pub playlists: library::playlists::PlaylistStore,
+    /// Where the window's size and place are kept between runs; `None` with `--no-session`.
+    window_store: Option<std::path::PathBuf>,
     revealed: AtomicBool,
 }
 
@@ -214,6 +216,7 @@ fn launch(
     let thumbs = media::thumbs::ThumbService::start(paths.cache.clone())?;
     let waveform = media::waveform::WaveformService::new(paths.cache.clone(), player.clone());
     start_cache_janitor(paths.cache.clone(), store.clone());
+    let window_store = (!cli.no_session).then(|| paths.data.join("window.json"));
     let state = AppState {
         paths,
         config: store,
@@ -228,6 +231,7 @@ fn launch(
         presets: preset_store,
         library,
         playlists,
+        window_store,
         revealed: AtomicBool::new(false),
     };
     let mut builder = tauri::Builder::default();
@@ -330,6 +334,8 @@ macro_rules! commands {
             ipc::commands::keybinds::keybinds_remove_custom,
             ipc::commands::window::window_get_state,
             ipc::commands::window::window_set_mode,
+            ipc::commands::window::window_pip_resize,
+            ipc::commands::window::window_pip_refit,
             ipc::commands::window::window_set_always_on_top,
             ipc::commands::window::window_minimize,
             ipc::commands::window::window_toggle_maximize,
@@ -412,16 +418,45 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("the main window is missing from tauri.conf.json")?;
     // Webview storage lives under our data root so `--home` / portable mode keep everything
     // in one place.
-    let window = WebviewWindowBuilder::from_config(app.handle(), &window_config)?
+    let native_frame = state.config.get().interface.window_decorations == WindowDecorations::Native;
+    let builder = WebviewWindowBuilder::from_config(app.handle(), &window_config)?
         .data_directory(state.paths.data.join("webview"))
-        .build()?;
+        .decorations(native_frame);
+    // Development verification runs must not take the keyboard: without this the webview
+    // asks for focus as soon as it exists, before the window is even shown.
+    #[cfg(debug_assertions)]
+    let builder = builder.focused(std::env::var_os("VIHPLUH_QUIET_TEST").is_none());
+    let window = builder.build()?;
+    // Last time's size and place, before the window is shown (ARCHITECTURE §9.4).
+    if let Some(path) = state.window_store.clone() {
+        app.state::<WindowManager>().restore(&window, path, state.capabilities.window_positioning);
+    }
     state.player.attach(app.handle().clone(), &window, platform::native_window_handle(&window))?;
     state.waveform.attach(app.handle().clone());
     let handle = app.handle().clone();
     state.cues.on_change(move |event| {
         let _ = handle.emit(events::MEDIA_CUES, event);
     });
-    WindowManager::track(&window);
+    // `general.pause_on_minimize`: video (not music) pauses while the window is minimized
+    // and carries on when it comes back — only if it was this that paused it.
+    let (player, config) = (state.player.clone(), state.config.clone());
+    let paused_here = AtomicBool::new(false);
+    WindowManager::track(&window, move |minimized| {
+        if minimized {
+            let now = player.snapshot();
+            let kind = now.media.as_ref().map(|media| media.kind);
+            if pauses_on_minimize(config.get().general.pause_on_minimize, now.status, kind) {
+                player.set_paused(true);
+                paused_here.store(true, Ordering::SeqCst);
+            }
+        } else if paused_here.swap(false, Ordering::SeqCst) {
+            player.set_paused(false);
+        }
+    });
+
+    // Taskbar preview buttons (Windows): the same three requests the media keys make.
+    let player = state.player.clone();
+    platform::taskbar::install(&window, move |command| player.media_command(command));
 
     // Settings changes — from the UI or from an editor saving config.toml — apply live.
     let (player, handle) = (state.player.clone(), app.handle().clone());
@@ -487,6 +522,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Whether minimizing the window should pause what is playing: only video that is actually
+/// playing, and only with the setting on.
+fn pauses_on_minimize(enabled: bool, status: Status, kind: Option<MediaKind>) -> bool {
+    enabled && status == Status::Playing && kind == Some(MediaKind::Video)
+}
+
 /// A second `vihpluh` launch forwarded its command line (ARCHITECTURE §4.6).
 fn on_second_instance(app: &AppHandle, argv: Vec<String>, cwd: String) {
     let Some(state) = app.try_state::<AppState>() else { return };
@@ -544,11 +585,15 @@ pub fn reveal_main_window(app: &AppHandle) {
     }
     if let Some(window) = app.get_webview_window("main") {
         tracing::debug!("revealing the main window");
-        // Development verification runs must not take focus from the person at the keyboard.
+        // Development verification runs must not take focus from the person at the keyboard:
+        // the window was built unfocused, so showing it does not activate it, and it goes
+        // behind everything else.
         #[cfg(debug_assertions)]
-        if std::env::var_os("VIHPLUH_QUIET_TEST").is_some()
-            && platform::show_window_unobtrusively(&window)
-        {
+        if std::env::var_os("VIHPLUH_QUIET_TEST").is_some() {
+            if let Err(err) = window.show() {
+                tracing::warn!("could not show the main window: {err}");
+            }
+            platform::send_window_to_back(&window);
             return;
         }
         if let Err(err) = window.show().and_then(|()| window.set_focus()) {
@@ -563,6 +608,12 @@ fn shutdown(app: &AppHandle) {
         tracing::warn!("shutdown watchdog fired: forcing exit");
         std::process::exit(0);
     });
+    // Quitting from the menu or a shortcut does not pass through the window's close request.
+    if let (Some(manager), Some(window)) =
+        (app.try_state::<WindowManager>(), app.get_webview_window("main"))
+    {
+        manager.remember(&window);
+    }
     if let Some(state) = app.try_state::<AppState>() {
         state.thumbs.shutdown();
         state.waveform.cancel();
@@ -596,4 +647,19 @@ fn headless_versions() -> Result<(String, String), player::mpv::MpvError> {
         mpv.get_string("mpv-version").unwrap_or_default(),
         mpv.get_string("ffmpeg-version").unwrap_or_default(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_playing_video_pauses_on_minimize() {
+        let video = Some(MediaKind::Video);
+        assert!(pauses_on_minimize(true, Status::Playing, video));
+        assert!(!pauses_on_minimize(false, Status::Playing, video), "setting off");
+        assert!(!pauses_on_minimize(true, Status::Playing, Some(MediaKind::Audio)), "music");
+        assert!(!pauses_on_minimize(true, Status::Paused, video), "already paused");
+        assert!(!pauses_on_minimize(true, Status::Idle, None));
+    }
 }

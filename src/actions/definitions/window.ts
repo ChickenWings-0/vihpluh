@@ -1,6 +1,17 @@
 /** Window and interface actions (KEYBINDS_AND_CONFIG §2 "Window and interface"). */
-import { Expand, Keyboard, Minimize2, Pin, Scan, Search, Settings, Shrink } from "lucide-react";
+import {
+  Expand,
+  Keyboard,
+  Minimize2,
+  PictureInPicture2,
+  Pin,
+  Scan,
+  Search,
+  Settings,
+  Shrink,
+} from "lucide-react";
 import { windowMinimize, windowSetAlwaysOnTop, windowSetMode } from "@/ipc/commands";
+import { useAppStore } from "@/stores/app";
 import { useOsdStore } from "@/stores/osd";
 import { useUiStore } from "@/stores/ui";
 import type { Action } from "../types";
@@ -12,6 +23,29 @@ export const PLAYER_ROOT_ID = "player-root";
 /** Returns keyboard focus to the player root, so single-key shortcuts are live again. */
 export function focusPlayerRoot(): void {
   document.getElementById(PLAYER_ROOT_ID)?.focus({ preventScroll: true });
+}
+
+/** The compositor hint for sessions that cannot place windows is shown once per run. */
+let pipHintShown = false;
+
+async function setPip(on: boolean) {
+  const state = ui();
+  if (on) {
+    // Picture-in-picture shows the picture alone: overlays and the drawer close first.
+    state.setOverlay(null);
+    state.closeContextMenu();
+    state.setLibrary(false);
+  }
+  await windowSetMode(on ? "pip" : "normal");
+  const caps = useAppStore.getState().info?.capabilities;
+  if (on && caps && !(caps.windowPositioning && caps.alwaysOnTop) && !pipHintShown) {
+    pipHintShown = true;
+    useOsdStore.getState().pushToast({
+      kind: "info",
+      text: "Wayland: use your compositor's 'Always on Top' for this window",
+    });
+  }
+  return undefined;
 }
 
 async function setFullscreen(on: boolean) {
@@ -27,6 +61,14 @@ export const windowActions: Action[] = [
     icon: Expand,
     isOn: () => ui().window.mode === "fullscreen",
     run: () => setFullscreen(ui().window.mode !== "fullscreen"),
+  },
+  {
+    id: "window.toggle_pip",
+    label: "Picture-in-picture",
+    group: "window",
+    icon: PictureInPicture2,
+    isOn: () => ui().window.mode === "pip",
+    run: () => setPip(ui().window.mode !== "pip"),
   },
   {
     id: "window.toggle_zen",
@@ -109,6 +151,7 @@ export const windowActions: Action[] = [
         state.setZen(false);
         return undefined;
       }
+      if (state.window.mode === "pip") return setPip(false);
       if (state.window.mode === "fullscreen") return setFullscreen(false);
       return undefined;
     },

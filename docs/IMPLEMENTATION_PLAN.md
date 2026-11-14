@@ -548,33 +548,75 @@ unmuted the muted test run for about half a second.
 
 ---
 
-## 13. Phase 11 — Window polish and Linux parity hardening — ☐ not started
+## 13. Phase 11 — Window polish and Linux parity hardening — ☑ closed (Windows, 2026-11-14) — Linux pending
 
 **Goal:** picture-in-picture, native-feeling windows on every platform, HDR confirmation, and closing every Linux gap.
 
-- [ ] **PiP** (D§9): mode switch on the main window, geometry save/restore, compact chrome, aspect-locked resize, corner placement; Wayland capability gating with the one-time toast.
-- [ ] Windows window polish: Snap Layouts on the maximize button, drop shadow and rounded corners on the undecorated window, correct maximized insets, taskbar thumbnail toolbar (prev/play/next), DPI change handling.
-- [ ] `interface.window_decorations = "native"` on all platforms (top bar drops its window controls).
-- [ ] Linux: CSD behaviour on GNOME (drag, double-click, resize edges, right-click window menu via `gtk_window` where possible); SSD on KDE with `native`; fractional-scale sharpness check; XWayland escape hatch (`video.linux_force_xwayland`).
-- [ ] Linux: NVIDIA detection → `WEBKIT_DISABLE_DMABUF_RENDERER` logic (`performance.webkit_dmabuf`), verified on an NVIDIA machine if available (else documented as unverified).
-- [ ] `tauri-plugin-window-state` for size/position (position skipped on Wayland).
-- [ ] HDR: Windows passthrough verified with display HDR on/off and mid-playback toggles; Linux tone-mapped output verified.
-- [ ] Multi-monitor: fullscreen on the window's current monitor; moving between monitors with different DPI/refresh.
-- [ ] `general.pause_on_minimize`; mouse-idle and focus-loss edge cases for auto-hide.
-- [ ] Full keyboard-only pass and screen-reader smoke test (Narrator / Orca) on the bars and settings.
-- [ ] Performance pass against every A§14 budget on **W** and **L**; fix or record each miss.
+- [x] **PiP** (D§9): mode switch on the main window, geometry save/restore, compact chrome, aspect-locked resize, corner placement; Wayland capability gating with the one-time toast. *(`window.rs` + `window/geometry.rs`, `features/pip/PipChrome.tsx`. Edges are dragged through `window_pip_resize` (D43). The Wayland path — resize and chrome only, the toast once — is written and unrun.)*
+- [ ] Windows window polish: Snap Layouts on the maximize button, drop shadow and rounded corners on the undecorated window, correct maximized insets, taskbar thumbnail toolbar (prev/play/next), DPI change handling. *(Done: the taskbar toolbar (`platform/taskbar.rs`, `taskbar_win.rs`). Not done: Snap Layouts on the custom button — not possible there (D44); `native` decorations give them. Unchanged and unchecked: shadow and corners come from the toolkit's undecorated-with-shadow window, maximized insets from the toolkit; a DPI change needs a second display.)*
+- [x] `interface.window_decorations = "native"` on all platforms (top bar drops its window controls). *(Applied when the window is built; PiP takes the frame off and puts it back. Windows only.)*
+- [ ] Linux: CSD behaviour on GNOME (drag, double-click, resize edges, right-click window menu via `gtk_window` where possible); SSD on KDE with `native`; fractional-scale sharpness check; XWayland escape hatch (`video.linux_force_xwayland`). *(Needs the Fedora machine. The escape hatch is in `platform/linux.rs` since Phase 1, unrun.)*
+- [ ] Linux: NVIDIA detection → `WEBKIT_DISABLE_DMABUF_RENDERER` logic (`performance.webkit_dmabuf`), verified on an NVIDIA machine if available (else documented as unverified). *(Written in `platform/linux.rs`; **unverified** — no Linux machine.)*
+- [x] `tauri-plugin-window-state` for size/position (position skipped on Wayland). *(Done without the plugin: `window.json` in the data directory (D42), so `--home` and portable mode keep it with everything else.)*
+- [ ] HDR: Windows passthrough verified with display HDR on/off and mid-playback toggles; Linux tone-mapped output verified. *(Needs an HDR display and the Fedora machine.)*
+- [ ] Multi-monitor: fullscreen on the window's current monitor; moving between monitors with different DPI/refresh. *(Single-display machine. The remembered window is checked against every monitor's work area — unit-tested.)*
+- [x] `general.pause_on_minimize`; mouse-idle and focus-loss edge cases for auto-hide. *(Pause on minimize is new. The auto-hide cases were already covered by the controller's tests (pointer leaving the window, holds, fullscreen top edge); nothing changed there.)*
+- [ ] Full keyboard-only pass and screen-reader smoke test (Narrator / Orca) on the bars and settings. *(Automated half done: every control in the bars, each sidebar tab, the queue, the drawer, every Settings page, the shortcuts sheet, and the palette has an accessible name (1 546 controls, none unnamed), and Tab from the player walks the top bar then the bottom bar with a visible ring. A screen reader was not run: it speaks.)*
+- [ ] Performance pass against every A§14 budget on **W** and **L**; fix or record each miss. *(**W** below; **L** pending.)*
 
 ### Verification
 
-- [ ] PiP on **W** and **L-X11**: `Ctrl+P` shrinks to the configured corner, stays on top, hover shows compact chrome, drag moves, edge-resize keeps aspect, `Esc` restores the exact previous geometry and mode (from windowed, maximized, and fullscreen).
+- [ ] PiP on **W** and **L-X11**: `Ctrl+P` shrinks to the configured corner, stays on top, hover shows compact chrome, drag moves, edge-resize keeps aspect, `Esc` restores the exact previous geometry and mode (from windowed, maximized, and fullscreen). *(**W**, from windowed: 480 × 270 logical in the bottom-right corner with its visible edges 24 logical px from the work area, topmost; hover showed the 28 px strip and the two buttons; Play/Pause and a click on the seek line worked; a north-west drag grew it to 640 × 360 around its bottom-right corner and an east drag stopped at 240 × 135; `Esc` put back the exact rectangle, the resizable frame, and not-on-top. With `native` decorations the frame came off and returned. Not exercised: dragging with the real pointer, and entering from maximized or fullscreen — both would have taken over the owner's screen. **L-X11** pending.)*
 - [ ] PiP on **L-Wayland**: resizes and switches chrome, shows the compositor hint once, never errors.
-- [ ] Windows: hovering maximize shows Snap Layouts; Win+arrow snapping works; shadow present; no 1-px gaps when maximized; taskbar buttons control playback.
+- [ ] Windows: hovering maximize shows Snap Layouts; Win+arrow snapping works; shadow present; no 1-px gaps when maximized; taskbar buttons control playback. *(Taskbar buttons ✓: added to the taskbar button (and again after `TaskbarButtonCreated`); a button's click message paused, resumed, went to the next item, and back. How the buttons look was not seen. Snap Layouts: no (D44). The rest needs the real pointer and keyboard.)*
 - [ ] GNOME Wayland, KDE Wayland, X11: move, resize from every edge, maximize, fullscreen, and restore all behave; no stuck transparent regions; no input dead zones.
 - [ ] T1 on an HDR display (W): `video-out-params` shows PQ/BT.2020 with passthrough on, SDR with it off; toggling Windows HDR mid-playback recovers without restart.
-- [ ] Budget table A§14 re-measured on both machines and pasted into the phase notes; every miss has an issue or a justified budget change.
-- [ ] The parity matrix (§15) has no unexplained ✗.
+- [ ] Budget table A§14 re-measured on both machines and pasted into the phase notes; every miss has an issue or a justified budget change. *(**W** measured and pasted below; three misses are recorded there and none has a budget change — that is the owner's call.)*
+- [ ] The parity matrix (§15) has no unexplained ✗. *(No ✗; the Linux columns are still empty.)*
 
 **Platforms:** W + L-Wayland (GNOME + KDE if available) + L-X11 — all mandatory.
+
+**Phase 11 notes (2026-11-14, Windows only).** Closed for Windows with open items: everything that
+needs the Fedora machine, an HDR display, a second display, or the owner's own hands on the pointer
+is listed above and still unticked.
+
+Budgets (A§14), measured on an optimised build (`--release`, debug assertions left on so the quiet
+test switch exists) while the machine was in use by other programs (about 46 % CPU load):
+
+| Metric | Budget | Measured (Windows) | |
+|---|---|---|---|
+| Cold start → window visible (no file) | ≤ 500 ms | 440 / 475 / 479 ms (from the first log line) | ✓ |
+| File → first video frame | ≤ 900 ms | T3: 949–1751 ms; T4: 925–1060 ms; T1: 1070–1097 ms | ✗ |
+| 4K60 HEVC, hwdec, UI idle, 5 min | 0 dropped | 0 dropped, 0 mistimed (T4 looped, `d3d11va`) | ✓ |
+| Same, sidebar open + seek-bar hover | ≤ 0.1 % | 0 dropped over 60 s of hovering | ✓ |
+| Chrome / panel / slider at 60 fps | no frame > 16 ms | hover test: 9 411 webview frames, none over 17 ms (p99 7.2 ms) | ✓ (panel open and slider drag not re-measured) |
+| Keypress → mpv command issued | ≤ 10 ms | command round trip: median 1.9 ms, p95 2.7 ms | ✓ |
+| Seek-preview thumbnail (uncached / cached) | p95 ≤ 400 / ≤ 30 ms | T1: 120.5 ms / 1.5 ms | ✓ |
+| Waveform for a 2 h film | ≤ 30 s | not re-measured (Phase 5: 3 h in 9.1 s, debug build) | ✓ |
+| Idle CPU, paused | ≤ 0.5 % | 1.95 % of the machine before the fix below; 0.06 % after | ✓ |
+| Memory while playing 4K (cache excluded) | ≤ 450 MB | about 740 MB: `vihpluh.exe` 932 MB with its 640 MB of demuxer caches full, plus 430 MB across six WebView2 processes | ✗ |
+| Library scan | ≥ 2 000 files/s | not re-measured (Phase 9: about 10 000 files/s) | ✓ |
+| Network requests with no stream open | 0 | `vihpluh.exe`: none. The WebView2 runtime's own processes: 2 connections to a Microsoft address and 2–3 secure-DNS probes | ✗ |
+
+The three misses:
+- **First frame.** mpv has the file open 240 ms after start; the rest is its decoder and renderer
+  coming up. Phase 1 measured 615–913 ms on an idle machine with a debug build, so load is part of
+  it, but the thumbnail handle, cue reader, and waveform reader now start at the same moment and
+  may be part of it too. To be measured again on an idle machine before changing anything.
+- **Memory.** The webview's share alone is close to the whole budget. Nothing in vihpluh's own
+  process stands out once the caches are subtracted (about 290 MB).
+- **Network.** The switches now passed to WebView2 (`additionalBrowserArgs`: no background
+  networking, component updates, reliability reports, or pings) did not close those connections,
+  and neither did five more tried through the environment. What they are was not established;
+  the packet capture of Phase 12 should name them.
+
+Found and fixed: with playback paused the webview's GPU process still used 30 % of a core — the
+time labels rewrote their (unchanged) text every frame and the seek bar restyled itself; both now
+touch the page only when something changed. The quiet verification runs had been taking keyboard
+focus at launch (the webview asks for it when it is created); they are now built unfocused. The
+corner placement was off by the invisible resize border of an undecorated window.
+During the first 5-minute playback run the window was closed from outside after about 90 seconds;
+the run was repeated.
 
 ---
 
@@ -616,9 +658,9 @@ Fill in as phases close (✓ works · ◐ works with documented limitation · �
 | Transparent UI over video, no flicker | | | |
 | Auto-hide chrome / Zen | | | |
 | Custom title bar + resize | | | |
-| Native decorations option | | ◐ expected: CSD on GNOME | |
+| Native decorations option | ✓ | ◐ expected: CSD on GNOME | |
 | Fullscreen | | | |
-| PiP positioning + always-on-top | | ◐ expected: compositor-controlled | |
+| PiP positioning + always-on-top | ✓ | ◐ expected: compositor-controlled | |
 | Media keys / OS media controls | | | |
 | Sleep inhibit | | | |
 | Seek thumbnails | | | |

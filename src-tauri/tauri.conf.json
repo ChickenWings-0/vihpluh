@@ -23,7 +23,8 @@
         "decorations": false,
         "shadow": true,
         "visible": false,
-        "dragDropEnabled": true
+        "dragDropEnabled": true,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-networking --disable-component-update --disable-domain-reliability --no-pings"
       }
     ],
     "security": {

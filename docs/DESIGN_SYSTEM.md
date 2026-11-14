@@ -552,7 +552,8 @@ Format: `Label  [key cap]`. Settings info tooltips (ⓘ) may run to two sentence
 - Entering: remember geometry → switch to borderless always-on-top → resize to `interface.pip_width` (default 480 px, height from video aspect)
   → move to `interface.pip_corner` (default bottom-right, 24 px from the work-area edges).
 - Chrome in PiP (shown on hover only): a 28 px bottom strip with Play/Pause, a 4 px seek line (8 px on hover), and at top-right
-  two 24 px buttons: **Restore** and **Close**. No dock, no drawer, no top bar. The whole surface drags the window; edges resize keeping aspect. Minimum 240 × 135.
+  two 24 px buttons: **Restore** and **Close**. No dock, no drawer, no top bar, no overlays (entering closes them). The whole surface drags the window; edges resize keeping aspect. Minimum 240 × 135.
+  When another file with another shape starts, the window keeps its width and corner and refits its height.
 - Leaving (`Ctrl+P`, Restore, `Esc`): restore previous geometry and mode.
 - **Wayland:** clients cannot position windows or keep themselves on top. When `capabilities.window_positioning` /
   `always_on_top` are false, PiP only resizes and switches chrome; a one-time toast says
