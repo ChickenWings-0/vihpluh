@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The pinned libmpv build is verified by SHA-256 inside the script.
+      - name: Cache libmpv
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/lib
+          key: libmpv-${{ hashFiles('scripts/fetch-libmpv.ps1') }}
+      - name: Fetch libmpv
+        run: pnpm fetch:libmpv
+
+      - name: Format
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Bindings are up to date
+        run: git diff --exit-code -- src/ipc/bindings
+      - name: Frontend checks
+        run: pnpm check
+      - name: Build
+        run: pnpm tauri build --no-bundle
+
+  fedora:
+    name: Fedora
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            webkit2gtk4.1-devel openssl-devel curl wget file git \
+            libappindicator-gtk3-devel librsvg2-devel libxdo-devel \
+            gtk3-devel libepoxy-devel wayland-devel mesa-libEGL-devel \
+            mpv-devel clang-devel nodejs rpm-build \
+            gcc gcc-c++ make pkgconf-pkg-config
+          npm install --global pnpm@9
+
+      - uses: actions/checkout@v4
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Frontend checks
+        run: pnpm check
+      - name: Build
+        run: pnpm tauri build --no-bundle

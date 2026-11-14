@@ -3,15 +3,18 @@
 A fast, keyboard-driven desktop media player: **mpv's playback engine** under a compact, modern interface
 inspired by [Juxtopposed's VLC redesign](https://youtu.be/ERFeOgqk324). Built for Windows 10/11 and Fedora Linux (Wayland and X11).
 
-> **Status: pre-alpha — design complete, implementation starting.**
-> This repository currently contains the full technical blueprint (see [Documentation](#documentation)).
-> There is no runnable build yet. The build instructions below describe the target workflow and become
-> valid when Phase 1 of the [implementation plan](docs/IMPLEMENTATION_PLAN.md) lands.
+> **Status: 0.1.0, in testing.** Every feature below is built and has been exercised on Windows 11.
+> The Linux build has not been run yet — treat the Fedora instructions as the intended workflow
+> until that line changes. Progress and open checks are in the [implementation plan](docs/IMPLEMENTATION_PLAN.md).
+
+![vihpluh playing a video, with the subtitle panel open (dark theme)](docs/screenshots/dark.png)
+
+![vihpluh with the Library drawer open (light theme)](docs/screenshots/light.png)
 
 vihpluh is a personal tool first: no telemetry, no accounts, no onboarding, no update nags, and no
 network traffic unless you open a stream. It's public so anyone who finds it useful can build it.
 
-## What it will do
+## What it does
 
 - **Plays everything mpv plays**, with hardware decoding tuned for high-bitrate 4K HEVC / AV1
   (D3D11VA on Windows; VA-API, NVDEC, or Vulkan Video on Linux) and automatic software fallback.
@@ -25,7 +28,8 @@ network traffic unless you open a stream. It's public so anyone who finds it use
   - *Bookmarks:* `Ctrl+B` to drop one; chapters and bookmarks in a single timeline.
 - **Per-show presets** — save subtitle delay, styling, preferred tracks, and picture settings once; they apply automatically to every episode in the series or folder.
 - **Queue ≠ playlist ≠ library** — a transient play queue, saved playlists, and a compact library drawer (videos, music, network streams / IPTV `.m3u`, recents, pinned folders) you can browse without interrupting playback.
-- **Readable settings** — ten flat, searchable categories in plain English, plus a visual hotkey editor. Everything is stored in clean TOML you can edit by hand.
+- **Readable settings** — ten flat, searchable categories in plain English, plus a visual hotkey editor with VLC-style and mpv-style keymaps. Everything is stored in clean TOML you can edit by hand.
+- **Picture-in-picture** (`Ctrl+P`), a command palette (`Ctrl+Shift+P`), light and dark themes, and any accent colour you like.
 
 ## Stack
 
@@ -41,7 +45,7 @@ The reasoning, including the alternatives considered, is in [ARCHITECTURE §2](d
 
 ## Building
 
-> Target workflow — see the status note above.
+Releases, when published, carry a Windows installer, a portable zip, and a Fedora RPM. To build from source:
 
 ### Windows 10 / 11
 
@@ -58,7 +62,8 @@ cd vihpluh
 pnpm install
 pnpm fetch:libmpv        # downloads the pinned libmpv build into src-tauri/lib/
 pnpm tauri dev           # run
-pnpm tauri build         # installer in src-tauri/target/release/bundle/
+pnpm tauri build         # installer in src-tauri/target/release/bundle/nsis/
+pnpm package:portable    # portable zip in src-tauri/target/release/bundle/portable/
 ```
 
 No administrator rights for the Visual Studio Build Tools? The GNU Rust toolchain works too:
@@ -93,6 +98,18 @@ sudo dnf install akmod-nvidia xorg-x11-drv-nvidia-cuda   # NVIDIA
 ```
 
 `scripts/check-deps.sh` reports anything missing. Full dependency details: [ARCHITECTURE §12](docs/ARCHITECTURE.md#12-build-and-runtime-dependencies).
+
+## Troubleshooting
+
+| Symptom | What to do |
+|---|---|
+| Build stops with "libmpv-2.dll is missing" (Windows) | Run `pnpm fetch:libmpv`. It needs 7-Zip on `PATH`. |
+| Build stops with "mpv.lib is missing" (Windows, MSVC) | Install LLVM (`winget install --id LLVM.LLVM`) and run `pnpm fetch:libmpv -- -Force`, or use the GNU toolchain. |
+| "pkg-config could not find mpv" (Fedora) | `sudo dnf install mpv-devel`. `scripts/check-deps.sh` lists everything else that is missing. |
+| HEVC files show no picture or an error (Fedora) | Stock Fedora cannot decode HEVC: follow the RPM Fusion steps above, then run `scripts/check-deps.sh --runtime`. |
+| The interface is blank or garbled (Linux, NVIDIA) | Set `performance.webkit_dmabuf = "off"` in `config.toml`, or try `video.linux_force_xwayland = true`. |
+| Video stutters or drops frames | Settings → Video → Hardware decoding should be *Auto*; the stream inspector (`I`) shows whether it is in use. Try Scaling quality *Fast*. |
+| Something else | Start with `--log-level debug` and read `vihpluh.log` (Windows: `%LOCALAPPDATA%/vihpluh/logs/`, Linux: `~/.local/state/vihpluh/`). |
 
 ## Configuration
 
@@ -129,5 +146,8 @@ A few defaults to get started: `Space` play/pause · `←` `→` seek · `F` ful
 
 Source code: [MIT](LICENSE).
 
-Binary releases for Windows bundle libmpv, which is typically built under the GPL; those binaries are
-distributed under the corresponding terms. See [ARCHITECTURE §13](docs/ARCHITECTURE.md#13-packaging-licensing-security).
+Windows binaries (installer and portable zip) bundle a libmpv build that includes GPL-licensed parts of
+mpv and FFmpeg, so those binaries are distributed under the **GNU GPL, version 3 or later**. The Fedora
+package bundles no playback code. Every bundled component is listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); the reasoning is in
+[ARCHITECTURE §13](docs/ARCHITECTURE.md#13-packaging-licensing-security).

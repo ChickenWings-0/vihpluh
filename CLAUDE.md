@@ -31,11 +31,11 @@ behind a UI inspired by Juxtopposed's VLC redesign. Windows 10/11 first, Fedora 
 at parity. Public MIT repo, but built for one person's daily use — no telemetry, no onboarding, no
 accounts, no update nags, no network traffic unless a stream is opened.
 
-**Current status:** Phases 1–11 closed on Windows (Linux pending: spike S2 and the render backend need
-the Fedora machine; Phases 3–5, 7, and 9–11 also have hands-on checks listed in their notes, and Phase 11
-records three missed performance budgets). Next step is
-**Phase 12** in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). Update this line when a
-phase closes.
+**Current status:** Phases 1–11 closed on Windows; Phase 12 (packaging, CI, release) is prepared but
+not released — its commits are not pushed, CI has never run, and `v0.1.0` is not tagged. Linux is pending
+throughout: spike S2 and the render backend need the Fedora machine. Phases 3–5, 7, and 9–12 list
+hands-on checks in their notes, and Phase 11 records three missed performance budgets. What remains is in
+[`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). Update this line when a phase closes.
 
 ## Document map — read the relevant one before touching that area
 
@@ -67,6 +67,8 @@ pnpm tauri dev                # run the app with hot reload
 pnpm tauri build              # release bundle (NSIS on Windows, RPM on Fedora)
 pnpm check                    # biome check + tsc --noEmit + vitest run
 pnpm gen:bindings             # regenerate src/ipc/bindings from Rust types (ts-rs)
+pnpm gen:notices              # regenerate THIRD_PARTY_NOTICES.md after changing dependencies
+pnpm package:portable         # Windows only, after `pnpm tauri build`: the portable zip
 cargo fmt --manifest-path src-tauri/Cargo.toml --all
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml

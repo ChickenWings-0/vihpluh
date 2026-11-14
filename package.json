@@ -10,6 +10,8 @@
     "check": "biome check . && tsc --noEmit && vitest run",
     "gen:bindings": "node scripts/gen-bindings.mjs",
     "fetch:libmpv": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-libmpv.ps1",
+    "gen:notices": "node scripts/gen-notices.mjs",
+    "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-portable.ps1",
     "tauri": "node scripts/tauri.mjs"
   },
   "dependencies": {
