@@ -47,6 +47,15 @@ $DownloadDir = Join-Path $LibRoot '.download'
 $Stamp = Join-Path $OutDir '.stamp'
 $StampValue = "$Asset $Sha256"
 
+# SHA-256 through .NET directly: under GitHub Actions, `pwsh` hands its PSModulePath to this
+# Windows PowerShell 5.1 process, which then cannot autoload Get-FileHash.
+function Get-Sha256([string]$Path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try { return ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $sha.Dispose() }
+}
+
 function Find-Tool([string[]]$Names, [string[]]$ExtraDirs = @()) {
     foreach ($name in $Names) {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue
@@ -121,7 +130,7 @@ $Archive = Join-Path $DownloadDir $Asset
 
 $needDownload = $true
 if (Test-Path $Archive) {
-    $have = (Get-FileHash -Algorithm SHA256 $Archive).Hash.ToLowerInvariant()
+    $have = Get-Sha256 $Archive
     $needDownload = $have -ne $Sha256
 }
 if ($needDownload) {
@@ -131,7 +140,7 @@ if ($needDownload) {
     Invoke-WebRequest -Uri $Url -OutFile $Archive -UseBasicParsing
 }
 
-$actual = (Get-FileHash -Algorithm SHA256 $Archive).Hash.ToLowerInvariant()
+$actual = Get-Sha256 $Archive
 if ($actual -ne $Sha256) {
     Remove-Item $Archive -Force
     throw "SHA-256 mismatch for $Asset`n  expected $Sha256`n  actual   $actual"

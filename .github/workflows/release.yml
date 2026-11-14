@@ -50,7 +50,10 @@ jobs:
           Copy-Item src-tauri/target/release/bundle/nsis/*.exe out/
           Copy-Item src-tauri/target/release/bundle/portable/*.zip out/
           Get-ChildItem out | ForEach-Object {
-            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            $stream = [System.IO.File]::OpenRead($_.FullName)
+            try { $hash = ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLowerInvariant() }
+            finally { $stream.Dispose(); $sha.Dispose() }
             "$hash  $($_.Name)" | Set-Content -Encoding ascii -NoNewline "$($_.FullName).sha256"
           }
       - uses: actions/upload-artifact@v4

@@ -23,6 +23,15 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# SHA-256 through .NET directly: under GitHub Actions, `pwsh` hands its PSModulePath to this
+# Windows PowerShell 5.1 process, which then cannot autoload Get-FileHash.
+function Get-Sha256([string]$Path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try { return ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $sha.Dispose() }
+}
+
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $TargetDir) { $TargetDir = Join-Path $RepoRoot 'src-tauri\target\release' }
 
@@ -51,10 +60,21 @@ Copy-Item (Join-Path $RepoRoot 'THIRD_PARTY_NOTICES.md') -Destination $Stage
 New-Item -ItemType File -Path (Join-Path $Stage 'portable') | Out-Null
 
 if (Test-Path $Zip) { Remove-Item -Force $Zip }
-Compress-Archive -Path $Stage -DestinationPath $Zip -CompressionLevel Optimal
+# .NET rather than Compress-Archive, which lives in a script module with the same autoload
+# problem. Entries are added one by one so their names use `/` (Windows PowerShell's
+# CreateFromDirectory writes `\`, which other unzip tools treat as part of the file name).
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::Open($Zip, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    foreach ($file in Get-ChildItem -File $Stage) {
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $archive, $file.FullName, "$Name/$($file.Name)", [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+}
+finally { $archive.Dispose() }
 Remove-Item -Recurse -Force $Stage
 
-$Hash = (Get-FileHash -Algorithm SHA256 $Zip).Hash.ToLower()
+$Hash = Get-Sha256 $Zip
 "$Hash  $Name.zip" | Set-Content -Encoding ascii -NoNewline "$Zip.sha256"
 Write-Host "$Zip"
 Write-Host "sha256 $Hash"
