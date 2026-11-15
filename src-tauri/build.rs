@@ -38,16 +38,34 @@ fn link_libmpv_windows(manifest_dir: &Path, target_env: &str) {
     }
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
-    // OUT_DIR = <target>/<profile>/build/<pkg>-<hash>/out
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap_or_default());
-    if let Some(profile_dir) = out_dir.ancestors().nth(3) {
-        let dest = profile_dir.join("libmpv-2.dll");
-        if !same_size(&dll, &dest) {
-            if let Err(err) = fs::copy(&dll, &dest) {
-                println!("cargo:warning=could not copy libmpv-2.dll to {}: {err}", dest.display());
-            }
+    let Some(profile_dir) = profile_dir(&out_dir) else {
+        println!(
+            "cargo:warning=could not find the profile directory above {}; copy libmpv-2.dll \
+             beside the executable yourself",
+            out_dir.display()
+        );
+        return;
+    };
+    let dest = profile_dir.join("libmpv-2.dll");
+    if !same_size(&dll, &dest) {
+        if let Err(err) = fs::copy(&dll, &dest) {
+            println!("cargo:warning=could not copy libmpv-2.dll to {}: {err}", dest.display());
         }
     }
+    // Test binaries do not sit beside the DLL (and under Cargo's newer build-dir layout they sit in
+    // the build directory). Cargo puts link-search paths inside the target directory on PATH when
+    // it runs them, so this makes `cargo test` find the DLL without copying it again.
+    println!("cargo:rustc-link-search=native={}", profile_dir.display());
+}
+
+/// `<target>/<profile>` from OUT_DIR, which is `<profile>/build/<pkg>-<hash>/out` in Cargo's
+/// original layout and `<profile>/build/<pkg>/<hash>/out` in the newer one (Rust 1.100).
+fn profile_dir(out_dir: &Path) -> Option<&Path> {
+    out_dir
+        .ancestors()
+        .find(|dir| dir.file_name().is_some_and(|name| name == "build"))
+        .and_then(Path::parent)
 }
 
 /// Linux: the system libmpv (`mpv-devel`) is located through pkg-config.
